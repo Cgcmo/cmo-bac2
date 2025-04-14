@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 from twilio.rest import Client
 import requests
 from deepface import DeepFace
-from deepface.commons import functions
+
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
@@ -79,22 +79,24 @@ def extract_faces(image_data):
     image_path = f"temp_{uuid.uuid4().hex}.jpg"
     with open(image_path, "wb") as f:
         f.write(base64.b64decode(image_data))
+
     try:
         print(f"🔍 Extracting faces from: {image_path}")
 
-        img = functions.preprocess_face(img=image_path, target_size=(112, 112), enforce_detection=False)
-        embedding = global_model.predict(img)[0].tolist()
+        embeddings = DeepFace.represent(img_path=image_path, model_name="SFace", enforce_detection=False)
 
         os.remove(image_path)
+
         return [{
             "face_id": str(uuid.uuid4()),
-            "embedding": embedding
-        }]
+            "embedding": emb["embedding"]
+        } for emb in embeddings]
+
     except Exception as e:
         print("❌ Face extraction failed:", str(e))
         os.remove(image_path)
         return []
-    
+
 
 @app.route("/upload-gallery/<album_id>", methods=["POST"])
 def upload_gallery(album_id):
