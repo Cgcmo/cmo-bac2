@@ -74,8 +74,9 @@ def compress_image(image_base64, quality=50):
         print("Error compressing image:", str(e))
         return None
     
-# ⬇️ Global variable to cache the model
-global_model = None
+print("⚡ Preloading SFace model once...")
+global_model = DeepFace.build_model("SFace")
+
 
 def extract_faces(image_data):
     global global_model
@@ -88,9 +89,9 @@ def extract_faces(image_data):
         print(f"🔍 Extracting faces from: {image_path}")
 
         # ✅ Lazy-load the model only once
-        if global_model is None:
-            print("⚡ Loading SFace model...")
-            global_model = DeepFace.build_model("SFace")
+        # if global_model is None:
+        #     print("⚡ Loading SFace model...")
+        #     global_model = DeepFace.build_model("SFace")
 
         # ✅ Get embeddings using cached model
         embeddings = DeepFace.represent(
