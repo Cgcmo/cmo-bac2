@@ -17,13 +17,15 @@ from datetime import datetime, timedelta
 from twilio.rest import Client
 import requests
 from deepface import DeepFace
-
-
+from keras import load_model
+from deepface.commons import functions
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
 
-print("✅ SFace model loaded into memory")
+print("⚡ Loading Facenet model from local file")
+global_model = load_model("facenet_keras.h5")
+
 
 # ✅ Ensure OPTIONS requests are handled correctly
 @app.before_request
@@ -78,34 +80,21 @@ def compress_image(image_base64, quality=50):
 # global_model = None
 
 def extract_faces(image_data):
+    image_path = f"temp_{uuid.uuid4().hex}.jpg"
+    with open(image_path, "wb") as f:
+        f.write(base64.b64decode(image_data))
+
     try:
-        image_path = f"temp_{uuid.uuid4().hex}.jpg"
-        with open(image_path, "wb") as f:
-            f.write(base64.b64decode(image_data))
-
         print(f"🔍 Extracting faces from: {image_path}")
-
-        # ⚡ Load the SFace model only when needed (on each request)
-        model = DeepFace.build_model("SFace")
-
-        # ✅ Get embeddings using the freshly loaded model
-        embeddings = DeepFace.represent(
-            img_path=image_path,
-            model_name="SFace",
-            enforce_detection=False,
-        )
-
-        # Remove the image file after processing
+        # Preprocess image for facenet
+        img = functions.preprocess_face(img=image_path, target_size=(160, 160), enforce_detection=False)
+        embedding = global_model.predict(img)[0].tolist()
         os.remove(image_path)
-
-        # After processing, we can unload the model manually
-        del model  # This will remove the model from memory
 
         return [{
             "face_id": str(uuid.uuid4()),
-            "embedding": emb["embedding"]
-        } for emb in embeddings]
-
+            "embedding": embedding
+        }]
     except Exception as e:
         print("❌ Face extraction failed:", str(e))
         os.remove(image_path)
