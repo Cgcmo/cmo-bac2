@@ -48,7 +48,8 @@ visitor_collection = auth_db["visitor_logs"]
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "facenet_keras.h5")
 
 
-
+print("⚡ Preloading SFace model (only once)")
+DeepFace.build_model("SFace")
 
 def compress_image(image_base64, quality=50):
     """
@@ -75,7 +76,7 @@ def compress_image(image_base64, quality=50):
         return None
     
 # ⬇️ Global variable to cache the model
-global_model = None
+# global_model = None
 
 def extract_faces(image_data):
     global global_model
