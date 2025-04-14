@@ -22,7 +22,7 @@ from deepface import DeepFace
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
-global_model = DeepFace.build_model("SFace") # Preload ONCE
+
 print("✅ SFace model loaded into memory")
 
 # ✅ Ensure OPTIONS requests are handled correctly
@@ -83,7 +83,12 @@ def extract_faces(image_data):
     try:
         print(f"🔍 Extracting faces from: {image_path}")
 
-        embeddings = DeepFace.represent(img_path=image_path, model_name="SFace", enforce_detection=False)
+        # ✅ Load model only when needed
+        embeddings = DeepFace.represent(
+            img_path=image_path,
+            model_name="SFace",
+            enforce_detection=False
+        )
 
         os.remove(image_path)
 
