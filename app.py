@@ -97,7 +97,7 @@ def extract_faces(image_data):
             img_path=image_path,
             model_name="SFace",
             enforce_detection=False,
-            model=global_model
+            
         )
 
         os.remove(image_path)
