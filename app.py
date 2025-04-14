@@ -16,10 +16,14 @@ import zipfile
 from datetime import datetime, timedelta
 from twilio.rest import Client
 import requests
-
+from deepface.basemodels import SFace
+from deepface.commons import functions
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+
+global_model = SFace.loadModel()  # Preload ONCE
+print("✅ SFace model loaded into memory")
 
 # ✅ Ensure OPTIONS requests are handled correctly
 @app.before_request
@@ -78,20 +82,14 @@ def extract_faces(image_data):
     try:
         print(f"🔍 Extracting faces from: {image_path}")
 
-        faces = DeepFace.represent(
-            img_path=image_path,
-            model_name="SFace",  # ✅ Lightweight model to avoid memory issues
-            enforce_detection=False
-        )
+        img = functions.preprocess_face(img=image_path, target_size=(112, 112), enforce_detection=False)
+        embedding = global_model.predict(img)[0].tolist()
 
         os.remove(image_path)
-        print(f"✅ Found {len(faces)} face(s)")
-        return [
-            {
-                "face_id": str(uuid.uuid4()),
-                "embedding": np.array(face["embedding"]).tolist()
-            } for face in faces
-        ]
+        return [{
+            "face_id": str(uuid.uuid4()),
+            "embedding": embedding
+        }]
     except Exception as e:
         print("❌ Face extraction failed:", str(e))
         os.remove(image_path)
