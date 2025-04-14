@@ -48,8 +48,7 @@ visitor_collection = auth_db["visitor_logs"]
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "facenet_keras.h5")
 
 
-print("⚡ Preloading SFace model (only once)")
-DeepFace.build_model("SFace")
+
 
 def compress_image(image_base64, quality=50):
     """
@@ -76,7 +75,7 @@ def compress_image(image_base64, quality=50):
         return None
     
 # ⬇️ Global variable to cache the model
-# global_model = None
+global_model = None
 
 def extract_faces(image_data):
     global global_model
@@ -89,16 +88,16 @@ def extract_faces(image_data):
         print(f"🔍 Extracting faces from: {image_path}")
 
         # ✅ Lazy-load the model only once
-        # if global_model is None:
-        #     print("⚡ Loading SFace model...")
-        #     global_model = DeepFace.build_model("SFace")
+        if global_model is None:
+            print("⚡ Loading SFace model...")
+            global_model = DeepFace.build_model("SFace")
 
         # ✅ Get embeddings using cached model
         embeddings = DeepFace.represent(
             img_path=image_path,
             model_name="SFace",
             enforce_detection=False,
-            # model=global_model
+            model=global_model
         )
 
         os.remove(image_path)
