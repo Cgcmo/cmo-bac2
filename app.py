@@ -74,33 +74,32 @@ def compress_image(image_base64, quality=50):
         print("Error compressing image:", str(e))
         return None
     
-# ⬇️ Global variable to cache the model
-global_model = None
+# # ⬇️ Global variable to cache the model
+# global_model = None
 
 def extract_faces(image_data):
-    global global_model
-
-    image_path = f"temp_{uuid.uuid4().hex}.jpg"
-    with open(image_path, "wb") as f:
-        f.write(base64.b64decode(image_data))
-
     try:
+        image_path = f"temp_{uuid.uuid4().hex}.jpg"
+        with open(image_path, "wb") as f:
+            f.write(base64.b64decode(image_data))
+
         print(f"🔍 Extracting faces from: {image_path}")
 
-        # ✅ Lazy-load the model only once
-        if global_model is None:
-            print("⚡ Loading SFace model...")
-            global_model = DeepFace.build_model("SFace")
+        # ⚡ Load the SFace model only when needed (on each request)
+        model = DeepFace.build_model("SFace")
 
-        # ✅ Get embeddings using cached model
+        # ✅ Get embeddings using the freshly loaded model
         embeddings = DeepFace.represent(
             img_path=image_path,
             model_name="SFace",
             enforce_detection=False,
-            # model=global_model
         )
 
+        # Remove the image file after processing
         os.remove(image_path)
+
+        # After processing, we can unload the model manually
+        del model  # This will remove the model from memory
 
         return [{
             "face_id": str(uuid.uuid4()),
