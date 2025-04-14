@@ -16,13 +16,13 @@ import zipfile
 from datetime import datetime, timedelta
 from twilio.rest import Client
 import requests
-from deepface.basemodels import SFace
+from deepface import DeepFace
 from deepface.commons import functions
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
-global_model = SFace.loadModel()  # Preload ONCE
+global_model = DeepFace.build_model("SFace") # Preload ONCE
 print("✅ SFace model loaded into memory")
 
 # ✅ Ensure OPTIONS requests are handled correctly
