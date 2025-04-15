@@ -20,15 +20,22 @@ from deepface import DeepFace
 import psutil  # 🔍 To log memory usage
 import traceback
 
-try:
-    print("📦 Preloading DeepFace SFace model...")
-    global_model = DeepFace.build_model("Facenet")  # 11MB instead of 38MB
 
+
+# ✅ Force DeepFace to use local weights path
+os.environ["DEEPFACE_HOME"] = os.path.join(os.path.dirname(__file__), ".deepface")
+
+
+# ✅ Try building DeepFace model from local weights
+try:
+    print("📦 Building SFace model from local weights...")
+    global_model = DeepFace.build_model("SFace")
     print("✅ Model loaded successfully.")
 except Exception as e:
-    print("❌ Failed to load SFace model:", str(e))
+    print("❌ Failed to build DeepFace model:", str(e))
     traceback.print_exc()
     global_model = None
+
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
@@ -88,8 +95,8 @@ def extract_faces(image_data):
     try:
         with open(image_path, "wb") as f:
             f.write(base64.b64decode(image_data))
-        
-        print(f"\n🔍 Extracting faces from: {image_path}")
+
+        print(f"🔍 Extracting faces from: {image_path}")
 
         memory = psutil.virtual_memory()
         print(f"💾 Memory - Used: {memory.used // 1024**2}MB, Free: {memory.available // 1024**2}MB, Total: {memory.total // 1024**2}MB")
@@ -100,8 +107,7 @@ def extract_faces(image_data):
 
         faces = DeepFace.represent(
             img_path=image_path,
-            model_name="Facenet",
-            # model=global_model,
+            model_name="SFace",
             enforce_detection=False
         )
 
@@ -121,7 +127,7 @@ def extract_faces(image_data):
         print("❌ Face extraction failed:", str(e))
         traceback.print_exc()
         return []
-    
+
     finally:
         if os.path.exists(image_path):
             os.remove(image_path)
