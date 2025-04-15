@@ -1,15 +1,19 @@
 flask
 flask-cors
 pymongo
-tensorflow==2.15.0
-keras==2.15.0         # ✅ Must match TensorFlow version
-opencv-python
+tensorflow
+keras 
+opencv-python 
 scipy
-numpy==1.23.5          # ✅ Compatible with TF 2.15
+numpy==1.23.5
+tensorflow==2.14
+keras==2.14 
 h5py
+pymongo
 pillow
+numpy
 deepface
 werkzeug
 python-dotenv
 gunicorn
-
+twilio
