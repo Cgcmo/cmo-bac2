@@ -2,7 +2,7 @@ flask
 flask-cors
 pymongo
 tensorflow==2.14.0  # ✅ Recommended for DeepFace
-keras==2.11.0        # ✅ Match TensorFlow version exactly
+keras==2.14.0        # ✅ Match TensorFlow version exactly
 h5py
 opencv-python
 scipy
