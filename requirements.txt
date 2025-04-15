@@ -17,3 +17,4 @@ werkzeug
 python-dotenv
 gunicorn
 twilio
+psutil==5.9.8
