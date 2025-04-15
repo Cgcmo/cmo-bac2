@@ -100,7 +100,7 @@ def extract_faces(image_data):
         faces = DeepFace.represent(
             img_path=image_path,
             model_name="SFace",
-            model=global_model,
+            # model=global_model,
             enforce_detection=False
         )
 
