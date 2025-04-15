@@ -14,9 +14,15 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import uuid
 import zipfile
 from datetime import datetime, timedelta
+from deepface.DeepFace import build_model
+from deepface.DeepFace import build_model
+facenet_model = build_model("Facenet")
 
 
 
+print("🔧 Loading Facenet model...")
+facenet_model = build_model("Facenet")
+print("✅ Facenet model loaded once.")
 
 
 
@@ -86,6 +92,7 @@ def extract_faces(image_data):
         faces = DeepFace.represent(
             img_path=image_path,
             model_name="Facenet",
+            model=facenet_model,
             enforce_detection=False
         )
 
