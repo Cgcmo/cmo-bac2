@@ -16,15 +16,13 @@ import zipfile
 from datetime import datetime, timedelta
 from twilio.rest import Client
 import requests
-from deepface import DeepFace
-from keras import load_model
-from deepface.commons import functions
+
+
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
 
-print("⚡ Loading Facenet model from local file")
-global_model = load_model("facenet_keras.h5")
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "facenet_keras.h5")
 
 
 # ✅ Ensure OPTIONS requests are handled correctly
@@ -83,22 +81,29 @@ def extract_faces(image_data):
     image_path = f"temp_{uuid.uuid4().hex}.jpg"
     with open(image_path, "wb") as f:
         f.write(base64.b64decode(image_data))
-
     try:
         print(f"🔍 Extracting faces from: {image_path}")
-        # Preprocess image for facenet
-        img = functions.preprocess_face(img=image_path, target_size=(160, 160), enforce_detection=False)
-        embedding = global_model.predict(img)[0].tolist()
-        os.remove(image_path)
 
-        return [{
-            "face_id": str(uuid.uuid4()),
-            "embedding": embedding
-        }]
+        faces = DeepFace.represent(
+            img_path=image_path,
+            model_name="SFace",  # ✅ Lightweight model to avoid memory issues
+            enforce_detection=False
+        )
+
+        os.remove(image_path)
+        print(f"✅ Found {len(faces)} face(s)")
+        return [
+            {
+                "face_id": str(uuid.uuid4()),
+                "embedding": np.array(face["embedding"]).tolist()
+            } for face in faces
+        ]
     except Exception as e:
         print("❌ Face extraction failed:", str(e))
         os.remove(image_path)
         return []
+
+
 
 
 @app.route("/upload-gallery/<album_id>", methods=["POST"])
