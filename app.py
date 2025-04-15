@@ -23,7 +23,8 @@ import traceback
 
 
 # ✅ Force DeepFace to use local weights path
-os.environ["DEEPFACE_HOME"] = os.path.join(os.path.dirname(__file__), ".deepface")
+os.environ["DEEPFACE_HOME"] = os.path.dirname(__file__)
+
 
 
 # ✅ Try building DeepFace model from local weights
