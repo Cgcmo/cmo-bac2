@@ -22,7 +22,8 @@ import traceback
 
 try:
     print("📦 Preloading DeepFace SFace model...")
-    global_model = DeepFace.build_model("SFace")
+    global_model = DeepFace.build_model("Facenet")  # 11MB instead of 38MB
+
     print("✅ Model loaded successfully.")
 except Exception as e:
     print("❌ Failed to load SFace model:", str(e))
@@ -99,7 +100,7 @@ def extract_faces(image_data):
 
         faces = DeepFace.represent(
             img_path=image_path,
-            model_name="SFace",
+            model_name="Facenet",
             # model=global_model,
             enforce_detection=False
         )
