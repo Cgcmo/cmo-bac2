@@ -15,13 +15,12 @@ import uuid
 import zipfile
 from datetime import datetime, timedelta
 from deepface.DeepFace import build_model
-from deepface.DeepFace import build_model
 facenet_model = build_model("Facenet")
 
 
 
 print("🔧 Loading Facenet model...")
-facenet_model = build_model("Facenet")
+facenet_model = DeepFace.build_model("Facenet")
 print("✅ Facenet model loaded once.")
 
 
@@ -34,6 +33,8 @@ CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 def handle_options_request():
     if request.method == "OPTIONS":
         return jsonify({"message": "CORS Preflight OK"}), 200
+    
+
 # MongoDB Setup
 client = MongoClient("mongodb+srv://Aayush:Aayush%402003@photo-gallery.pvd7i.mongodb.net/?retryWrites=true&w=majority&appName=photo-gallery")
 db = client["photo_gallery"]
@@ -78,7 +79,7 @@ def compress_image(image_base64, quality=50):
         print("Error compressing image:", str(e))
         return None
 
-# Helper function: Extract Face Embeddings
+
 # Helper function: Extract Face Embeddings
 def extract_faces(image_data):
     image_path = f"temp_{uuid.uuid4().hex}.jpg"
@@ -87,12 +88,11 @@ def extract_faces(image_data):
 
     try:
         print(f"🔍 Extracting faces from: {image_path}")
-
-        # ✅ No 'model' or 'model_path' passed — just use default loading
+        
         faces = DeepFace.represent(
             img_path=image_path,
             model_name="Facenet",
-            model=facenet_model,
+            
             enforce_detection=False
         )
 
@@ -109,8 +109,6 @@ def extract_faces(image_data):
         print("❌ Face extraction failed:", str(e))
         os.remove(image_path)
         return []
-
-
 
 
 @app.route("/")
@@ -700,54 +698,6 @@ MSG91_AUTHKEY = "189400AF2q5EpqOYU67f60efbP1"
 MSG91_SENDER_ID = "CMOPAI"  # e.g., MSGIND
 MSG91_TEMPLATE_ID = "61161dfa1848146fb7608293"  # from your approved MSG91 templates
 
-otp_store = {}
-
-@app.route("/send-otp", methods=["POST"])
-def send_otp():
-    data = request.json
-    mobile = data.get("mobile")
-
-    if not mobile:
-        return jsonify({"error": "Mobile number is required"}), 400
-
-    otp = str(uuid.uuid4().int)[:6]
-    otp_store[mobile] = otp
-
-    # MSG91 SMS API Payload
-    url = "https://api.msg91.com/api/v5/otp"
-    payload = {
-        "template_id": MSG91_TEMPLATE_ID,
-        "mobile": f"91{mobile}",  # Indian mobile format
-        "authkey": MSG91_AUTHKEY,
-        "otp": otp,
-        "sender": MSG91_SENDER_ID
-    }
-
-    try:
-        res = requests.post(url, json=payload)
-        result = res.json()
-        if res.status_code == 200:
-            return jsonify({"message": "OTP sent successfully!"}), 200
-        else:
-            return jsonify({"error": result.get("message", "Failed to send OTP")}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/verify-otp", methods=["POST"])
-def verify_otp():
-    data = request.json
-    mobile = data.get("mobile")
-    otp = data.get("otp")
-
-    if not mobile or not otp:
-        return jsonify({"error": "Mobile and OTP are required"}), 400
-
-    if otp_store.get(mobile) != otp:
-        return jsonify({"error": "Invalid OTP"}), 401
-
-    del otp_store[mobile]  # ✅ Remove OTP after use
-
-    return jsonify({"message": "OTP verified successfully"}), 200
 
 @app.route("/complete-signup", methods=["POST"])
 def complete_signup():

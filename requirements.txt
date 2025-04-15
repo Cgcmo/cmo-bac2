@@ -1,18 +1,14 @@
 flask
 flask-cors
 pymongo
-tensorflow
-keras 
-opencv-python 
-scipy
-numpy==1.23.5
-tensorflow==2.14
-keras==2.14 
+tensorflow==2.11.0  # ✅ Recommended for DeepFace
+keras==2.11.0        # ✅ Match TensorFlow version exactly
 h5py
-pymongo
+opencv-python
+scipy
+numpy==1.23.5        # ✅ Compatible with TF 2.11
+deepface==0.0.79     # ✅ Stable version that supports 'model='
 pillow
-numpy
-deepface
 werkzeug
 python-dotenv
 gunicorn
