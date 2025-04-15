@@ -14,28 +14,10 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import uuid
 import zipfile
 from datetime import datetime, timedelta
-from twilio.rest import Client
-import requests
-from deepface import DeepFace
-import psutil  # 🔍 To log memory usage
-import traceback
 
 
 
-# ✅ Force DeepFace to use local weights path
-os.environ["DEEPFACE_HOME"] = os.path.dirname(__file__)
 
-
-
-# ✅ Try building DeepFace model from local weights
-try:
-    print("📦 Building SFace model from local weights...")
-    global_model = DeepFace.build_model("SFace")
-    print("✅ Model loaded successfully.")
-except Exception as e:
-    print("❌ Failed to build DeepFace model:", str(e))
-    traceback.print_exc()
-    global_model = None
 
 
 app = Flask(__name__)
@@ -91,31 +73,23 @@ def compress_image(image_base64, quality=50):
         return None
 
 # Helper function: Extract Face Embeddings
+# Helper function: Extract Face Embeddings
 def extract_faces(image_data):
     image_path = f"temp_{uuid.uuid4().hex}.jpg"
-    try:
-        with open(image_path, "wb") as f:
-            f.write(base64.b64decode(image_data))
+    with open(image_path, "wb") as f:
+        f.write(base64.b64decode(image_data))
 
+    try:
         print(f"🔍 Extracting faces from: {image_path}")
 
-        memory = psutil.virtual_memory()
-        print(f"💾 Memory - Used: {memory.used // 1024**2}MB, Free: {memory.available // 1024**2}MB, Total: {memory.total // 1024**2}MB")
-
-        if global_model is None:
-            print("❌ DeepFace model not loaded.")
-            return []
-
+        # ✅ No 'model' or 'model_path' passed — just use default loading
         faces = DeepFace.represent(
             img_path=image_path,
-            model_name="SFace",
+            model_name="Facenet",
             enforce_detection=False
         )
 
-        if not faces:
-            print("⚠️ No face detected in image.")
-            return []
-
+        os.remove(image_path)
         print(f"✅ Found {len(faces)} face(s)")
         return [
             {
@@ -126,12 +100,9 @@ def extract_faces(image_data):
 
     except Exception as e:
         print("❌ Face extraction failed:", str(e))
-        traceback.print_exc()
+        os.remove(image_path)
         return []
 
-    finally:
-        if os.path.exists(image_path):
-            os.remove(image_path)
 
 
 
