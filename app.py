@@ -16,7 +16,18 @@ import zipfile
 from datetime import datetime, timedelta
 from twilio.rest import Client
 import requests
+from deepface import DeepFace
+import psutil  # 🔍 To log memory usage
+import traceback
 
+try:
+    print("📦 Preloading DeepFace SFace model...")
+    global_model = DeepFace.build_model("SFace")
+    print("✅ Model loaded successfully.")
+except Exception as e:
+    print("❌ Failed to load SFace model:", str(e))
+    traceback.print_exc()
+    global_model = None
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
@@ -73,18 +84,30 @@ def compress_image(image_base64, quality=50):
 # Helper function: Extract Face Embeddings
 def extract_faces(image_data):
     image_path = f"temp_{uuid.uuid4().hex}.jpg"
-    with open(image_path, "wb") as f:
-        f.write(base64.b64decode(image_data))
     try:
-        print(f"🔍 Extracting faces from: {image_path}")
+        with open(image_path, "wb") as f:
+            f.write(base64.b64decode(image_data))
+        
+        print(f"\n🔍 Extracting faces from: {image_path}")
+
+        memory = psutil.virtual_memory()
+        print(f"💾 Memory - Used: {memory.used // 1024**2}MB, Free: {memory.available // 1024**2}MB, Total: {memory.total // 1024**2}MB")
+
+        if global_model is None:
+            print("❌ DeepFace model not loaded.")
+            return []
 
         faces = DeepFace.represent(
             img_path=image_path,
-            model_name="SFace",  # ✅ Lightweight model to avoid memory issues
+            model_name="SFace",
+            model=global_model,
             enforce_detection=False
         )
 
-        os.remove(image_path)
+        if not faces:
+            print("⚠️ No face detected in image.")
+            return []
+
         print(f"✅ Found {len(faces)} face(s)")
         return [
             {
@@ -92,10 +115,15 @@ def extract_faces(image_data):
                 "embedding": np.array(face["embedding"]).tolist()
             } for face in faces
         ]
+
     except Exception as e:
         print("❌ Face extraction failed:", str(e))
-        os.remove(image_path)
+        traceback.print_exc()
         return []
+    
+    finally:
+        if os.path.exists(image_path):
+            os.remove(image_path)
 
 
 
