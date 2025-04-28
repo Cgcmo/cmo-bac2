@@ -1,13 +1,30 @@
+# flask
+# flask-cors
+# pymongo
+# tensorflow==2.14.0  # ✅ Recommended for DeepFace
+# keras==2.14.0        # ✅ Match TensorFlow version exactly
+# h5py
+# opencv-python
+# scipy
+# numpy==1.23.5        # ✅ Compatible with TF 2.11
+# deepface==0.0.79     # ✅ Stable version that supports 'model='
+# pillow
+# werkzeug
+# python-dotenv
+# gunicorn
+# twilio
+# psutil==5.9.8
+# boto3
 flask
 flask-cors
 pymongo
-tensorflow==2.14.0  # ✅ Recommended for DeepFace
-keras==2.14.0        # ✅ Match TensorFlow version exactly
+tensorflow==2.16.1
+keras==3.3.3
 h5py
 opencv-python
 scipy
-numpy==1.23.5        # ✅ Compatible with TF 2.11
-deepface==0.0.79     # ✅ Stable version that supports 'model='
+numpy==1.26.4
+deepface==0.0.79
 pillow
 werkzeug
 python-dotenv
