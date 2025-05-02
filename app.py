@@ -22,6 +22,7 @@ from botocore.client import Config
 from bson.objectid import ObjectId 
 from flask import send_file
 import requests
+from datetime import datetime 
 
 # Cloudflare R2 credentials
 R2_ACCOUNT_ID = "7ba78c8bca1993356ed4787cee42d111"
@@ -67,7 +68,7 @@ client = pymongo.MongoClient(
  )
 
 
-
+# client = MongoClient("mongodb://localhost:27017/")
 
 photo_gallery_db = client["photo_gallery"]
 albums_collection = photo_gallery_db["albums"]
@@ -181,9 +182,21 @@ def get_events_by_date():
     selected_date = data.get("date")
 
     if not selected_date:
-        return jsonify({"error": "Date is required"}), 400
+        # If no date provided, return latest 10 unique events
+        events = albums_collection.find({}, {"name": 1, "date": 1}).sort("date", -1).limit(20)
 
-    # Fetch all albums with that date and extract unique event names
+        seen = set()
+        latest_events = []
+        for event in events:
+            name = event.get("name")
+            if name and name not in seen:
+                seen.add(name)
+                latest_events.append(name)
+            if len(latest_events) == 10:
+                break
+
+        return jsonify(latest_events), 200
+
     albums = albums_collection.find({"date": selected_date}, {"name": 1})
     event_names = list(set(album["name"] for album in albums))
 
@@ -460,7 +473,6 @@ def update_user(user_id):
     data = request.json
     update_fields = {}
 
-    # Allow status updates along with other fields
     for field in ["name", "email", "mobile", "district", "status"]:
         if field in data:
             update_fields[field] = data[field]
@@ -468,23 +480,37 @@ def update_user(user_id):
     if not update_fields:
         return jsonify({"error": "No fields to update"}), 400
 
+    # Try users collection first
     result = users_collection.update_one({"_id": user_id}, {"$set": update_fields})
 
     if result.modified_count == 0:
-        return jsonify({"error": "User not found or no changes made"}), 404
+        # Try clients collection if not found in users
+        result = clients_collection.update_one({"_id": user_id}, {"$set": update_fields})
+        if result.modified_count == 0:
+            return jsonify({"error": "User not found or no changes made"}), 404
 
     return jsonify({"message": "User updated successfully"}), 200
+
+
+
 # API: Get All Users
 @app.route("/users", methods=["GET"])
 def get_users():
-    users = list(users_collection.find({}, {"password": 0})) 
-    for user in users:
-        user["_id"] = str(user["_id"])  # Convert ObjectId to string
-        user.setdefault("photo", "/default-profile.png") # Exclude password
-    return jsonify(users)
+    projection = {"name": 1, "email": 1, "mobile": 1, "district": 1, "role": 1, "status": 1}
+    
+    users = list(users_collection.find({}, projection))
+    clients = list(clients_collection.find({}, projection))
 
+    combined_users = users + clients
 
+    for user in combined_users:
+        user["_id"] = str(user["_id"])
+        user["role"] = user.get("role", "User")
+        user["status"] = user.get("status", True)
+        user["mobile"] = user.get("mobile") or "Gmail User"
+        user["district"] = user.get("district") or "Gmail User"
 
+    return jsonify(combined_users)
 
 
 
@@ -667,11 +693,14 @@ def count_photos():
 @app.route("/count-users", methods=["GET"])
 def count_users():
     try:
-        count = users_collection.count_documents({})
-        return jsonify({"total_users": count}), 200
+        user_count = users_collection.count_documents({})
+        client_count = clients_collection.count_documents({})
+        total = user_count + client_count
+        return jsonify({"total_users": total}), 200
     except Exception as e:
         print("❌ Error in /count-users:", e)
         return jsonify({"error": str(e)}), 500
+
 
 @app.route("/increment-download-count", methods=["POST"])
 def increment_download_count():
@@ -686,11 +715,6 @@ def increment_download_count():
     except Exception as e:
         print("❌ Error incrementing download count:", e)
         return jsonify({"error": str(e)}), 500
-
-@app.route("/get-download-count", methods=["GET"])
-def get_download_count():
-    count_doc = auth_db["download-count"].find_one({"_id": "total"})
-    return jsonify({"count": count_doc["count"] if count_doc else 0}), 200
 
 @app.route("/record-visit", methods=["POST"])
 def record_visit():
@@ -878,11 +902,13 @@ def client_login():
     if not mobile or not password:
         return jsonify({"error": "Mobile and password are required"}), 400
 
-    # Look up client by mobile
     client = clients_collection.find_one({"mobile": mobile})
-    
+
     if not client or not check_password_hash(client["password"], password):
         return jsonify({"error": "Invalid credentials"}), 401
+
+    if not client.get("status", True):
+        return jsonify({"error": "Your account is inactive. Please contact admin."}), 403
 
     return jsonify({
         "message": "Login successful",
@@ -999,50 +1025,279 @@ def proxy_image():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     
-@app.route("/register-google-user", methods=["POST"])
-def register_google_user():
-    data = request.json
-    required_fields = ("name", "email")
 
-    if not all(data.get(k) for k in required_fields):
-        return jsonify({"error": "Name and Email are required"}), 400
+
+@app.route("/google-login", methods=["POST"]) 
+def google_login():
+    data = request.json
+    email = data.get("email")
+
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+
+    existing_user = clients_collection.find_one({"email": email})
+    
+    if existing_user:
+        if not existing_user.get("status", True):
+            return jsonify({"error": "Your account is inactive. Please contact admin."}), 403
+        return jsonify({
+            "message": "User already exists",
+            "userId": existing_user["_id"]
+        }), 200
 
     try:
-        with open("public/pro.png", "rb") as f:
-            photo_base64 = base64.b64encode(f.read()).decode("utf-8")
-    except:
-        photo_base64 = ""
+        photo = data.get("photo")
+        if not photo:
+            with open("public/pro.png", "rb") as f:
+                photo = base64.b64encode(f.read()).decode("utf-8")
 
-    existing_user = clients_collection.find_one({"email": data["email"]})
-
-    if existing_user:
-        # ✅ If user exists, update name and photo (optional)
-        clients_collection.update_one(
-            {"email": data["email"]},
-            {"$set": {
-                "name": data["name"],
-                "photo": photo_base64,
-                "mobile": data.get("mobile", ""),
-                "district": data.get("district", "")
-            }}
-        )
-        return jsonify({"message": "User updated successfully"}), 200
-    else:
-        # ✅ If not exists, insert new
         new_user = {
             "_id": str(uuid.uuid4()),
-            "name": data["name"],
-            "email": data["email"],
-            "mobile": data.get("mobile", ""),
-            "district": data.get("district", ""),
+            "name": data.get("name"),
+            "email": email,
+            "mobile": "",
+            "district": "",
             "role": "User",
             "status": True,
-            "photo": photo_base64,
-            "password": "",  # No password for Google users
+            "photo": photo,
+            "password": ""
         }
 
         clients_collection.insert_one(new_user)
-        return jsonify({"message": "Google User registered successfully", "userId": new_user["_id"]}), 201
+
+        return jsonify({
+            "message": "Google user registered",
+            "userId": new_user["_id"]
+        }), 201
+
+    except Exception as e:
+        print("❌ Error saving Google user:", str(e))
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/record-album-view", methods=["POST"])
+def record_album_view():
+    data = request.json
+    user_id = data.get("userId")
+    album_id = data.get("albumId")
+
+    if not user_id or not album_id:
+        return jsonify({"error": "Missing userId or albumId"}), 400
+
+    # Only keep last 5 unique albums (most recent first)
+    clients_collection.update_one(
+        {"_id": user_id},
+        {
+            "$pull": {"recent_albums": album_id},  # Remove if exists
+        }
+    )
+
+    clients_collection.update_one(
+        {"_id": user_id},
+        {
+            "$push": {
+                "recent_albums": {
+                    "$each": [album_id],
+                    "$position": 0,  # Add to beginning
+                    "$slice": 5      # Keep only 5 items
+                }
+            }
+        }
+    )
+
+    return jsonify({"message": "Album view recorded"}), 200
+
+@app.route("/photos-from-recent-albums", methods=["POST"])
+def photos_from_recent_albums():
+    data = request.json
+    user_id = data.get("userId")
+    page = int(data.get("page", 1))
+    limit = int(data.get("limit", 16))
+
+    if not user_id:
+        return jsonify({"error": "userId is required"}), 400
+
+    user = clients_collection.find_one({"_id": user_id}, {"recent_albums": 1})
+    album_ids = user.get("recent_albums", []) if user else []
+
+    all_photos = []
+    for album_id in album_ids:
+        album = albums_collection.find_one({"_id": album_id})
+        if album:
+            all_photos.extend([
+                {"photo_id": p["photo_id"], "image": p["image"]}
+                for p in album.get("photos", [])
+            ])
+
+    total_photos = len(all_photos)
+    skip = (page - 1) * limit
+    paginated_photos = all_photos[skip:skip + limit]
+
+    return jsonify({
+        "photos": paginated_photos,
+        "total": total_photos
+    }), 200
+
+
+@app.route("/record-download-history", methods=["POST"])
+def record_download_history():
+    data = request.json
+    user_id = data.get("userId")
+    download = data.get("download")
+
+    if not user_id or not download:
+        return jsonify({"error": "Missing userId or download object"}), 400
+
+    download["downloadId"] = str(int(datetime.utcnow().timestamp() * 1000))
+    
+    # Try to get album name using the first photo URL
+    image_url = download.get("photoUrls", [None])[0]
+    album_name = "Downloaded Images"
+
+    if image_url:
+        album = albums_collection.find_one({"photos.image": image_url})
+        if album:
+            album_name = album.get("name", album_name)
+
+    # Replace the title with the album name
+    download["title"] = album_name
+
+    # Add the new download to the beginning of the array, keep only last 10
+    clients_collection.update_one(
+        {"_id": user_id},
+        {
+            "$push": {
+                "download_history": {
+                    "$each": [download],
+                    "$position": 0,
+                    "$slice": 10
+                }
+            }
+        }
+    )
+
+     # ✅ Increment global counters (downloads and photos)
+    photo_count = download.get("photoCount", 0)
+    if isinstance(photo_count, int) and photo_count > 0:
+        clients_collection.update_one(
+            {"_id": user_id},
+            {"$inc": {
+                "download_stats.downloads": 1,
+                "download_stats.photos": photo_count
+            }}
+        )
+
+
+    return jsonify({
+        "message": "Download history recorded and counters updated",
+        "downloadId": download["downloadId"]
+    }), 200
+
+@app.route("/get-download-history", methods=["POST"])
+def get_download_history():
+    data = request.json
+    user_id = data.get("userId")
+    
+    if not user_id:
+        return jsonify({"error": "Missing userId"}), 400
+
+    user = clients_collection.find_one({"_id": user_id}, {"download_history": 1})
+    history = user.get("download_history", []) if user else []
+
+    return jsonify({"history": history}), 200
+
+
+@app.route("/update-download-history", methods=["POST"])
+def update_download_history():
+    data = request.json
+    user_id = data.get("userId")
+    updated_history = data.get("updatedHistory", [])
+
+    if not user_id:
+        return jsonify({"error": "Missing userId"}), 400
+
+    clients_collection.update_one(
+        {"_id": user_id},
+        {"$set": {"download_history": updated_history[:10]}}  # limit to 10
+    )
+
+    return jsonify({"message": "Download history updated"}), 200
+
+@app.route("/update-download-date", methods=["POST"])
+def update_download_date():
+    data = request.json
+    user_id = data.get("userId")
+    download_id = data.get("downloadId")  # ✅ use ID instead of title
+    new_date = data.get("date")
+
+    if not user_id or not download_id or not new_date:
+        return jsonify({"error": "Missing data"}), 400
+
+    user = clients_collection.find_one({"_id": user_id}, {"download_history": 1})
+    if not user or "download_history" not in user:
+        return jsonify({"error": "User or download history not found"}), 404
+
+    history = user["download_history"]
+    updated_history = []
+
+    for item in history:
+        if str(item.get("downloadId")) == str(download_id):
+            item["lastDownload"] = new_date
+            updated_history.insert(0, item)  # move updated to top
+        else:
+            updated_history.append(item)
+
+    # ✅ Deduplicate + limit to 10
+    seen = set()
+    final_history = []
+    for item in updated_history:
+        item_id = str(item.get("downloadId"))
+        if item_id not in seen:
+            final_history.append(item)
+            seen.add(item_id)
+        if len(final_history) == 10:
+            break
+
+    clients_collection.update_one(
+        {"_id": user_id},
+        {"$set": {"download_history": final_history}}
+    )
+
+    return jsonify({"message": "Download date updated and reordered"}), 200
+
+@app.route("/get-user-download-count", methods=["POST"])
+def get_user_download_count():
+    data = request.json
+    user_id = data.get("userId")
+
+    if not user_id:
+        return jsonify({"error": "Missing userId"}), 400
+
+    user = clients_collection.find_one({"_id": user_id}, {"download_stats": 1})
+    stats = user.get("download_stats", {}) if user else {}
+
+    return jsonify({
+        "downloads": stats.get("downloads", 0),
+        "photos": stats.get("photos", 0)
+    }), 200
+
+@app.route("/total-user-downloads", methods=["GET"])
+def total_user_downloads():
+    try:
+        pipeline = [
+            {
+                "$group": {
+                    "_id": None,
+                    "total": {"$sum": "$download_stats.downloads"}
+                }
+            }
+        ]
+        result = list(clients_collection.aggregate(pipeline))
+        total_downloads = result[0]["total"] if result else 0
+        return jsonify({"count": total_downloads}), 200
+    except Exception as e:
+        print("❌ Error calculating user download sum:", e)
+        return jsonify({"count": 0}), 200
+
 
 
 if __name__ == "__main__":

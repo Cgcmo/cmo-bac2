@@ -15,16 +15,34 @@
 # twilio
 # psutil==5.9.8
 # boto3
+# flask
+# flask-cors
+# pymongo
+# tensorflow==2.16.1
+# keras==2.11.0
+# h5py
+# opencv-python
+# scipy
+# numpy==1.26.4
+# deepface==0.0.79
+# pillow
+# werkzeug
+# python-dotenv
+# gunicorn
+# twilio
+# psutil==5.9.8
+# boto3
+
 flask
 flask-cors
 pymongo
-tensorflow==2.16.1
-keras==2.11.0
+tensorflow==2.19.0
+keras==3.9.2
+deepface==0.0.93
 h5py
 opencv-python
 scipy
 numpy==1.26.4
-deepface==0.0.79
 pillow
 werkzeug
 python-dotenv
