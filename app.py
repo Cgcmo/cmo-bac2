@@ -73,14 +73,14 @@ def handle_options_request():
         return jsonify({"message": "CORS Preflight OK"}), 200
     
 
-# client = pymongo.MongoClient(
-#     "mongodb+srv://Aayush:Aayush%402003@photo-gallery.pvd7i.mongodb.net/?retryWrites=true&w=majority&appName=photo-gallery",
-#     tls=True,
-#     tlsCAFile=certifi.where()  # Add this line
-#  )
+client = pymongo.MongoClient(
+    "mongodb+srv://Aayush:Aayush%402003@photo-gallery.pvd7i.mongodb.net/?retryWrites=true&w=majority&appName=photo-gallery",
+    tls=True,
+    tlsCAFile=certifi.where()  # Add this line
+ )
 
 
-client = MongoClient("mongodb://localhost:27017/")
+# client = MongoClient("mongodb://localhost:27017/")
 
 photo_gallery_db = client["photo_gallery"]
 albums_collection = photo_gallery_db["albums"]
