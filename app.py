@@ -23,14 +23,26 @@ from bson.objectid import ObjectId
 from flask import send_file
 import requests
 from datetime import datetime 
+from dotenv import load_dotenv
+load_dotenv()
+
 
 # Cloudflare R2 credentials
-R2_ACCOUNT_ID = "7ba78c8bca1993356ed4787cee42d111"
-R2_ACCESS_KEY_ID = "cb70427b13bece34cef2f9bca5b08b6a"
-R2_SECRET_ACCESS_KEY = "965be11d5a0247c43d4510bbc9b3cebe7da55406c7ba5d49b1967698960fe4c6"
-R2_BUCKET_NAME = "photo-gallery-bucket"
-R2_REGION = "auto"  # Usually 'auto' for Cloudflare
-PUBLIC_BUCKET_DOMAIN = "pub-b067d59ae9cd4e1797621c719e4f31e3.r2.dev"
+# R2_ACCOUNT_ID = "7ba78c8bca1993356ed4787cee42d111"
+# R2_ACCESS_KEY_ID = "cb70427b13bece34cef2f9bca5b08b6a"
+# R2_SECRET_ACCESS_KEY = "965be11d5a0247c43d4510bbc9b3cebe7da55406c7ba5d49b1967698960fe4c6"
+# R2_BUCKET_NAME = "photo-gallery-bucket"
+# R2_REGION = "auto"  # Usually 'auto' for Cloudflare
+# PUBLIC_BUCKET_DOMAIN = "pub-b067d59ae9cd4e1797621c719e4f31e3.r2.dev"
+
+
+R2_ACCOUNT_ID = os.getenv("R2_ACCOUNT_ID")
+R2_ACCESS_KEY_ID = os.getenv("R2_ACCESS_KEY_ID")
+R2_SECRET_ACCESS_KEY = os.getenv("R2_SECRET_ACCESS_KEY")
+R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME")
+R2_REGION = os.getenv("R2_REGION")
+PUBLIC_BUCKET_DOMAIN = os.getenv("PUBLIC_BUCKET_DOMAIN")
+
 
 # ✅ Set your R2 endpoint URL
 R2_ENDPOINT_URL = f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
@@ -61,14 +73,14 @@ def handle_options_request():
         return jsonify({"message": "CORS Preflight OK"}), 200
     
 
-client = pymongo.MongoClient(
-    "mongodb+srv://Aayush:Aayush%402003@photo-gallery.pvd7i.mongodb.net/?retryWrites=true&w=majority&appName=photo-gallery",
-    tls=True,
-    tlsCAFile=certifi.where()  # Add this line
- )
+# client = pymongo.MongoClient(
+#     "mongodb+srv://Aayush:Aayush%402003@photo-gallery.pvd7i.mongodb.net/?retryWrites=true&w=majority&appName=photo-gallery",
+#     tls=True,
+#     tlsCAFile=certifi.where()  # Add this line
+#  )
 
 
-# client = MongoClient("mongodb://localhost:27017/")
+client = MongoClient("mongodb://localhost:27017/")
 
 photo_gallery_db = client["photo_gallery"]
 albums_collection = photo_gallery_db["albums"]
@@ -271,7 +283,19 @@ def get_albums():
         limit = int(request.args.get("limit", 16))
         skip = (page - 1) * limit
 
-        albums = list(albums_collection.find({}, {"_id": 1, "name": 1, "date": 1, "cover": 1}).skip(skip).limit(limit))
+        albums = albums_collection.aggregate([
+            {"$limit": limit},
+            {"$skip": skip},
+            {"$project": {
+                "_id": 1,
+                "name": 1,
+                "date": 1,
+                "cover": 1,
+                "photo_count": {"$size": {"$ifNull": ["$photos", []]}}
+            }}
+        ])
+        albums = list(albums)
+
         total_count = albums_collection.count_documents({})
 
         return jsonify({
@@ -295,11 +319,12 @@ def get_album_photos(album_id):
         photos = album.get("photos", [])
         total_photos = len(photos)
 
-        if limit == 0:   # ✅ After fetching album
-            limit = total_photos
+        if limit == 0:
+            paginated_photos = photos  # return all
+        else:
+            skip = (page - 1) * limit
+            paginated_photos = photos[skip:skip + limit]
 
-        skip = (page - 1) * limit
-        paginated_photos = photos[skip:skip + limit]
 
         formatted_photos = [
             {
@@ -1001,10 +1026,18 @@ def get_albums_by_district():
         query = {"districts": {"$in": [district_name]}}
         total = albums_collection.count_documents(query)
 
-        albums = list(albums_collection.find(
-            query,
-            {"_id": 1, "name": 1, "date": 1, "cover": 1}
-        ).skip(skip).limit(limit))
+        albums = list(albums_collection.aggregate([
+            {"$match": query},
+            {"$skip": skip},
+            {"$limit": limit},
+            {"$project": {
+                "_id": 1,
+                "name": 1,
+                "date": 1,
+                "cover": 1,
+                "photo_count": {"$size": {"$ifNull": ["$photos", []]}}  # ✅ Add this line
+            }}
+        ]))
 
         return jsonify({
             "albums": albums,
@@ -1012,6 +1045,7 @@ def get_albums_by_district():
         }), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 @app.route("/proxy-image")
 def proxy_image():
@@ -1298,6 +1332,17 @@ def total_user_downloads():
         print("❌ Error calculating user download sum:", e)
         return jsonify({"count": 0}), 200
 
+@app.route("/get-user-by-email/<string:email>", methods=["GET"])
+def get_user_by_email(email):
+    user = clients_collection.find_one({"email": email})
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    return jsonify({
+        "name": user.get("name", ""),
+        "mobile": user.get("mobile", ""),
+        "district": user.get("district", "")
+    }), 200
 
 
 if __name__ == "__main__":
