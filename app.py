@@ -25,6 +25,8 @@ import requests
 from datetime import datetime 
 from dotenv import load_dotenv
 load_dotenv()
+from urllib.parse import urlparse
+
 
 
 # Cloudflare R2 credentials
@@ -1380,15 +1382,15 @@ def upload_banner():
         )
         public_url = f"https://{PUBLIC_BUCKET_DOMAIN}/{filename}"
 
+        banner_id = str(uuid.uuid4())
         banners_collection.insert_one({
-            "_id": str(uuid.uuid4()),
+            "_id": banner_id,
             "title": title,
             "image": public_url,
             "size": size,
             "date": datetime.now().strftime("%d/%m/%Y"),
         })
-
-        return jsonify({"url": public_url}), 200
+        return jsonify({"url": public_url, "id": banner_id}), 200
 
     except Exception as e:
         print("Upload error:", e)
