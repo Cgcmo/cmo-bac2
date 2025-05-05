@@ -88,6 +88,8 @@ albums_collection = photo_gallery_db["albums"]
 dist_and_depart_db = client["dist_and_depart"]
 districts_collection = dist_and_depart_db["districts"]
 departments_collection = dist_and_depart_db["departments"]
+banners_collection = dist_and_depart_db["banners"]
+
 
 auth_db = client["auth_db"]
 users_collection = auth_db["users"]
@@ -291,6 +293,7 @@ def get_albums():
                 "name": 1,
                 "date": 1,
                 "cover": 1,
+                 "districts": 1,
                 "photo_count": {"$size": {"$ifNull": ["$photos", []]}}
             }}
         ])
@@ -1343,6 +1346,86 @@ def get_user_by_email(email):
         "mobile": user.get("mobile", ""),
         "district": user.get("district", "")
     }), 200
+
+
+@app.route("/upload-banner", methods=["POST"])
+def upload_banner():
+    data = request.json
+    image_base64 = data.get("image")
+    title = data.get("title", "Untitled Banner")
+    size = data.get("size", "")
+
+    if not image_base64 or not title:
+        return jsonify({"error": "Missing title or image"}), 400
+
+    try:
+        if image_base64.startswith("data:image"):
+            header, image_base64 = image_base64.split(",", 1)
+            ext = header.split("/")[1].split(";")[0].lower()
+            if ext not in ["png", "jpg", "jpeg"]:
+                return jsonify({"error": "Unsupported image format"}), 400
+        else:
+            return jsonify({"error": "Invalid image data"}), 400
+
+        filename = f"banners/{uuid.uuid4().hex}.{ext}"
+
+        # ✅ Decode Base64 and upload to R2
+        image_data = base64.b64decode(image_base64)
+        s3_client.put_object(
+            Bucket=R2_BUCKET_NAME,
+            Key=filename,
+            Body=image_data,
+            ContentType=f"image/{ext}",
+            ACL='public-read'
+        )
+        public_url = f"https://{PUBLIC_BUCKET_DOMAIN}/{filename}"
+
+        banners_collection.insert_one({
+            "_id": str(uuid.uuid4()),
+            "title": title,
+            "image": public_url,
+            "size": size,
+            "date": datetime.now().strftime("%d/%m/%Y"),
+        })
+
+        return jsonify({"url": public_url}), 200
+
+    except Exception as e:
+        print("Upload error:", e)
+        return jsonify({"error": "Internal server error"}), 500
+
+@app.route("/get-banners", methods=["GET"])
+def get_banners():
+    banners = list(dist_and_depart_db["banners"].find({}, {"_id": 1, "title": 1, "image": 1, "size": 1, "date": 1}))
+    formatted = [{"id": str(b["_id"]), **b} for b in banners]
+    return jsonify(formatted)
+
+
+@app.route("/delete-banner/<banner_id>", methods=["DELETE"])
+def delete_banner(banner_id):
+    try:
+        banners = dist_and_depart_db["banners"]
+
+        # ✅ Match the string ID, not UUID object
+        banner = banners.find_one({"_id": banner_id})
+
+        if not banner:
+            return jsonify({"error": "Banner not found"}), 404
+
+        # ✅ Get R2 key from URL
+        key = banner["image"].split("banners/")[1]
+
+        # Delete from R2
+        s3_client.delete_object(Bucket=R2_BUCKET_NAME, Key=f"banners/{key}")
+
+        # Delete from DB
+        banners.delete_one({"_id": banner_id})
+
+        return jsonify({"message": "Deleted"}), 200
+
+    except Exception as e:
+        print("Error deleting banner:", e)
+        return jsonify({"error": "Internal Server Error"}), 500
 
 
 if __name__ == "__main__":
