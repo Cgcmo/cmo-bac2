@@ -1499,6 +1499,7 @@ print("✅ Facenet model loaded once.")
 
 
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # Allow 100MB uploads
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
 # ✅ Ensure OPTIONS requests are handled correctly
