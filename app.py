@@ -1,3 +1,4 @@
+
 # from flask import Flask, request, jsonify, send_file
 # from flask_cors import CORS
 # from pymongo import MongoClient
@@ -6,17 +7,16 @@
 # import os
 # import io  # ✅ Add this line at the top
 # from PIL import Image
+# from rembg import remove
+# from PIL import ImageFilter
 # from deepface import DeepFace
 # import numpy as np
 # from bson.objectid import ObjectId
 # from werkzeug.security import generate_password_hash, check_password_hash
 # import uuid
-# import zipfile
 # from datetime import datetime, timedelta
 # from deepface.DeepFace import build_model
 # facenet_model = build_model("Facenet")
-# import pymongo
-# import certifi
 # import boto3
 # from botocore.client import Config
 # from bson.objectid import ObjectId 
@@ -26,16 +26,11 @@
 # from dotenv import load_dotenv
 # load_dotenv()
 # from urllib.parse import urlparse
+# from scipy.spatial.distance import cosine
+# import certifi
+# import pymongo
 
 
-
-# # Cloudflare R2 credentials
-# # R2_ACCOUNT_ID = "7ba78c8bca1993356ed4787cee42d111"
-# # R2_ACCESS_KEY_ID = "cb70427b13bece34cef2f9bca5b08b6a"
-# # R2_SECRET_ACCESS_KEY = "965be11d5a0247c43d4510bbc9b3cebe7da55406c7ba5d49b1967698960fe4c6"
-# # R2_BUCKET_NAME = "photo-gallery-bucket"
-# # R2_REGION = "auto"  # Usually 'auto' for Cloudflare
-# # PUBLIC_BUCKET_DOMAIN = "pub-b067d59ae9cd4e1797621c719e4f31e3.r2.dev"
 
 
 # R2_ACCOUNT_ID = os.getenv("R2_ACCOUNT_ID")
@@ -66,6 +61,7 @@
 
 
 # app = Flask(__name__)
+# app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # Allow 100MB uploads
 # CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
 # # ✅ Ensure OPTIONS requests are handled correctly
@@ -75,14 +71,14 @@
 #         return jsonify({"message": "CORS Preflight OK"}), 200
     
 
-# client = pymongo.MongoClient(
-#     "mongodb+srv://Aayush:Aayush%402003@photo-gallery.pvd7i.mongodb.net/?retryWrites=true&w=majority&appName=photo-gallery",
-#     tls=True,
-#     tlsCAFile=certifi.where()  # Add this line
-#  )
+# # client = pymongo.MongoClient(
+# #     "mongodb+srv://Aayush:Aayush%402003@photo-gallery.pvd7i.mongodb.net/?retryWrites=true&w=majority&appName=photo-gallery",
+# #     tls=True,
+# #     tlsCAFile=certifi.where()  # Add this line
+# #  )
 
 
-# # client = MongoClient("mongodb://localhost:27017/")
+# client = MongoClient("mongodb://localhost:27017/")
 
 # photo_gallery_db = client["photo_gallery"]
 # albums_collection = photo_gallery_db["albums"]
@@ -136,61 +132,85 @@
 
 # # Helper function: Compress Image
 
-# def compress_image(image_base64, quality=50):
-#     """
-#     Decodes a base64 image, compresses it, and returns the compressed image as base64.
-#     Converts RGBA to RpythonGB if necessary (JPEG does not support transparency).
-#     """
-#     try:
-#         # ✅ Decode base64 image into bytes
-#         image_bytes = base64.b64decode(image_base64)
-#         image = Image.open(io.BytesIO(image_bytes))  # ✅ Convert bytes to PIL Image
+# # def compress_image(image_base64, quality=50):
+# #     """
+# #     Decodes a base64 image, compresses it, and returns the compressed image as base64.
+# #     Converts RGBA to RpythonGB if necessary (JPEG does not support transparency).
+# #     """
+# #     try:
+# #         # ✅ Decode base64 image into bytes
+# #         image_bytes = base64.b64decode(image_base64)
+# #         image = Image.open(io.BytesIO(image_bytes))  # ✅ Convert bytes to PIL Image
 
-#         # ✅ Fix: Convert RGBA to RGB before saving as JPEG
-#         if image.mode == "RGBA":
-#             image = image.convert("RGB")
+# #         # ✅ Fix: Convert RGBA to RGB before saving as JPEG
+# #         if image.mode == "RGBA":
+# #             image = image.convert("RGB")
 
         
-#         output_io = io.BytesIO()
-#         image.save(output_io, format="JPEG", quality=quality,  optimize=True)
-#         output_io.seek(0)
-#         compressed_base64 = base64.b64encode(output_io.getvalue()).decode("utf-8")
-#         return compressed_base64
-#     except Exception as e:
-#         print("Error compressing image:", str(e))
-#         return None
+# #         output_io = io.BytesIO()
+# #         image.save(output_io, format="JPEG", quality=quality,  optimize=True)
+# #         output_io.seek(0)
+# #         compressed_base64 = base64.b64encode(output_io.getvalue()).decode("utf-8")
+# #         return compressed_base64
+# #     except Exception as e:
+# #         print("Error compressing image:", str(e))
+# #         return None
 
 
-# # Helper function: Extract Face Embeddings
-# def extract_faces(image_data):
-#     image_path = f"temp_{uuid.uuid4().hex}.jpg"
-#     with open(image_path, "wb") as f:
-#         f.write(base64.b64decode(image_data))
 
+# def extract_faces(image_pil):
 #     try:
-#         print(f"🔍 Extracting faces from: {image_path}")
-        
+#         # ✅ Step 1: Remove background
+#         buffered = io.BytesIO()
+#         image_pil.save(buffered, format="PNG")
+#         input_bytes = buffered.getvalue()
+#         output_bytes = remove(input_bytes)  # remove background
+#         image_no_bg = Image.open(io.BytesIO(output_bytes)).convert("RGB")
+
+#         # ✅ Step 2: Sharpen the image
+#         sharpened = image_no_bg.filter(ImageFilter.SHARPEN)
+
+#         # ✅ Step 3: Save temporarily for DeepFace
+#         temp_path = f"temp_{uuid.uuid4().hex}.jpg"
+#         sharpened.save(temp_path)
+
+#         print(f"🔍 Extracting faces from sharpened + bg-removed image: {temp_path}")
+
+#         # ✅ Step 4: Use MTCNN for face detection
 #         faces = DeepFace.represent(
-#             img_path=image_path,
+#             img_path=temp_path,
 #             model_name="Facenet",
-            
-#             enforce_detection=False
+#             detector_backend="mtcnn",
+#             enforce_detection=True
 #         )
 
-#         os.remove(image_path)
-#         print(f"✅ Found {len(faces)} face(s)")
+#         os.remove(temp_path)
+
+#         if not faces:
+#             print("❌ No faces detected.")
+#             return []
+
+#         # ✅ Sort by size and take top 4 clear faces
+#         faces_sorted = sorted(
+#             faces,
+#             key=lambda f: f.get("facial_area", {}).get("w", 0) * f.get("facial_area", {}).get("h", 0),
+#             reverse=True
+#         )[:4]
+
+#         print(f"✅ Returning top {len(faces_sorted)} faces")
+
 #         return [
 #             {
 #                 "face_id": str(uuid.uuid4()),
 #                 "embedding": np.array(face["embedding"]).tolist()
-#             } for face in faces
+#             } for face in faces_sorted
 #         ]
 
 #     except Exception as e:
 #         print("❌ Face extraction failed:", str(e))
-#         os.remove(image_path)
+#         if os.path.exists(temp_path):
+#             os.remove(temp_path)
 #         return []
-
 
 # @app.route("/events-by-date", methods=["POST"])
 # def get_events_by_date():
@@ -226,58 +246,112 @@
 # # API: Create Album
 # @app.route("/create-album", methods=["POST"])
 # def create_album():
-#     data = request.json
+#     name = request.form.get("name")
+#     date = request.form.get("date")
+#     department = request.form.get("department", "")
+#     districts = request.form.get("districts", "")
 
-#     # Upload cover image to R2
-#     compressed_cover = compress_image(data["cover"])
-#     cover_filename = f"covers/{uuid.uuid4().hex}.jpg"
-#     cover_url = upload_to_r2(compressed_cover, cover_filename)
+#     # Handle missing required fields
+#     if not name or not date or 'cover' not in request.files:
+#         return jsonify({"error": "Missing required fields"}), 400
 
-#     album = {
-#         "_id": str(uuid.uuid4()),
-#         "name": data["name"],
-#         "date": data["date"],
-#         "cover": cover_url,  # ✅ Save URL instead of base64
-#         "department": data.get("department", ""),
-#         "districts": data.get("districts", []),
-#         "photos": []
-#     }
-#     albums_collection.insert_one(album)
-#     return jsonify({"message": "Album created successfully"}), 201
+#     cover_file = request.files["cover"]
+#     if not cover_file:
+#         return jsonify({"error": "No cover image uploaded"}), 400
+
+#     try:
+#         # ✅ Compress cover image using PIL
+#         image = Image.open(cover_file.stream)
+#         if image.mode == "RGBA":
+#             image = image.convert("RGB")
+
+#         buffer = io.BytesIO()
+#         image.save(buffer, format="JPEG", quality=50, optimize=True)
+#         buffer.seek(0)
+#         image_bytes = buffer.getvalue()
+#         base64_image = base64.b64encode(image_bytes).decode("utf-8")
+
+#         # ✅ Upload to R2
+#         cover_filename = f"covers/{uuid.uuid4().hex}.jpg"
+#         cover_url = upload_to_r2(base64_image, cover_filename)
+
+#         album = {
+#             "_id": str(uuid.uuid4()),
+#             "name": name,
+#             "date": date,
+#             "cover": cover_url,
+#             "department": department,
+#             "districts": [districts],  # as a list
+#             "photos": []
+#         }
+
+#         albums_collection.insert_one(album)
+#         return jsonify({"message": "Album created successfully"}), 201
+
+#     except Exception as e:
+#         print("❌ Album creation error:", str(e))
+#         return jsonify({"error": "Failed to process cover image"}), 500
+
 
 
 # # API: Upload Photos to Album
 # @app.route("/upload-gallery/<album_id>", methods=["POST"])
 # def upload_gallery(album_id):
-#     data = request.json
-#     album = albums_collection.find_one({"_id": album_id})
-#     if not album:
-#         return jsonify({"error": "Album not found"}), 404
+#     try:
+#         files = request.files.getlist("photos")
+#         if not files:
+#             return jsonify({"error": "No files uploaded"}), 400
 
-#     new_photos = []
-#     for image in data.get("images", []):
-#         if not image or not isinstance(image, str):
-#             continue  # Skip invalid images
+#         new_photos = []
+#         rejected_files = []
 
-#         compressed_image = compress_image(image)
-#         if not compressed_image:
-#             continue  # Skip if compression failed
+#         for file in files:
+#             try:
+#                 image = Image.open(file.stream)
+#                 if image.mode == "RGBA":
+#                     image = image.convert("RGB")
 
-#         # Upload photo to R2
-#         photo_filename = f"photos/{uuid.uuid4().hex}.jpg"
-#         photo_url = upload_to_r2(compressed_image, photo_filename)
+#                 embeddings = extract_faces(image)
 
-#         new_photos.append({
-#             "photo_id": str(uuid.uuid4()),
-#             "image": photo_url,  # ✅ Save URL instead of base64
-#             "face_embeddings": extract_faces(compressed_image)  # Still pass compressed image for face
-#         })
+#                 if not embeddings:
+#                     print(f"❌ No face found in: {file.filename}")
+#                     rejected_files.append(file.filename)
+#                     continue
 
-#     if new_photos:
-#         albums_collection.update_one({"_id": album_id}, {"$push": {"photos": {"$each": new_photos}}})
-#         return jsonify({"message": "Photos uploaded successfully"}), 200
-#     else:
-#         return jsonify({"error": "No valid images uploaded"}), 400
+#                 buffer = io.BytesIO()
+#                 image.save(buffer, format="JPEG", quality=50, optimize=True)
+#                 buffer.seek(0)
+#                 compressed_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+
+#                 filename = f"gallery/{uuid.uuid4().hex}.jpg"
+#                 image_url = upload_to_r2(compressed_base64, filename)
+
+#                 photo = {
+#                     "photo_id": str(uuid.uuid4()),
+#                     "image": image_url,
+#                     "face_embeddings": embeddings
+#                 }
+#                 new_photos.append(photo)
+
+#             except Exception as e:
+#                 print(f"❌ Failed to process {file.filename}: {e}")
+#                 rejected_files.append(file.filename)
+
+#         if new_photos:
+#             albums_collection.update_one(
+#                 {"_id": album_id},
+#                 {"$push": {"photos": {"$each": new_photos}}}
+#             )
+
+#         return jsonify({
+#             "message": "Upload complete",
+#             "uploaded": len(new_photos),
+#             "rejected": rejected_files
+#         }), 201
+
+#     except Exception as e:
+#         print("❌ Upload failed:", str(e))
+#         return jsonify({"error": "Upload failed"}), 500
 
 # # API: Get Albums
 # @app.route("/albums", methods=["GET"])
@@ -658,19 +732,31 @@
 #     return jsonify({"photo_id": photo["photo_id"], "image": photo["image"]})
 
 
-#  #✅ Updated Route: Search by Uploaded Photo
+# #  ✅ Updated Route: Search by Uploaded Photo
 # @app.route("/search-by-upload", methods=["POST"])
 # def search_by_upload():
-#     data = request.json
-#     image_data = data.get("image")
-#     if not image_data:
-#         return jsonify({"error": "No image provided"}), 400
-#     try:
-#         compressed_data = compress_image(image_data)
-#         if not compressed_data:
-#             return jsonify({"error": "Image compression failed"}), 500
+#     # ✅ Get file from form-data
+#     if "image" not in request.files:
+#         return jsonify({"error": "No image file provided"}), 400
 
-#         query_embeddings = extract_faces(compressed_data)
+#     uploaded_file = request.files["image"]
+
+#     if uploaded_file.filename == "":
+#         return jsonify({"error": "No file selected"}), 400
+
+#     try:
+#         # ✅ Convert uploaded file to PIL Image for consistent processing
+#         image = Image.open(uploaded_file.stream)
+#         image.load()  # force decoding
+#         print("✅ Uploaded image format:", image.format, "| size:", image.size, "| mode:", image.mode)
+
+#         if image.mode == "RGBA":
+#             image = image.convert("RGB")
+
+
+#         # ✅ Use the same extract_faces logic as /upload-gallery
+#         query_embeddings = extract_faces(image)
+
 #         if not query_embeddings:
 #             return jsonify({"error": "No face found in uploaded photo"}), 404
 
@@ -685,13 +771,14 @@
 #                         emb2 = np.array(query_face.get("embedding"))
 #                         cosine_sim = np.dot(emb1, emb2) / (np.linalg.norm(emb1) * np.linalg.norm(emb2))
 #                         print(f"🔗 Similarity: {cosine_sim:.4f}")
-#                         if cosine_sim > 0.5:
+#                         if cosine_sim > 0.6:
 #                             matched_photos.append({
 #                                 "photo_id": photo.get("photo_id"),
 #                                 "image": photo.get("image")
 #                             })
 #                             break
 
+#         # ✅ Remove duplicates
 #         seen_ids = set()
 #         unique_photos = []
 #         for photo in matched_photos:
@@ -700,12 +787,15 @@
 #                 unique_photos.append(photo)
 
 #         if not unique_photos:
-#             return jsonify({"error": "No matching faces found in database, either there is no photo of uploaded face or face is not clear "}), 404
+#             return jsonify({"error": "No matching faces found in database, either there is no photo of uploaded face or face is not clear"}), 404
 
 #         return jsonify({"photos": unique_photos}), 200
 
 #     except Exception as e:
+#         print("❌ Error in /search-by-upload:", str(e))
 #         return jsonify({"error": str(e)}), 500
+
+
 
 # @app.route("/count-albums", methods=["GET"])
 # def count_albums():
@@ -1437,6 +1527,273 @@
 
 
 
+
+# def upload_to_r2(base64_image, filename):
+#     try:
+#         image_data = base64.b64decode(base64_image)
+#         s3_client.put_object(
+#             Bucket=R2_BUCKET_NAME,
+#             Key=filename,
+#             Body=image_data,
+#             ContentType="image/jpeg",
+#             ACL='public-read'
+#         )
+#         public_url = f"https://{PUBLIC_BUCKET_DOMAIN}/{filename}"
+
+#         return public_url
+#     except Exception as e:
+#         print("❌ Upload to R2 failed:", str(e))
+#         return None
+
+
+
+# Helper function: Compress Image
+
+# def compress_image(image_base64, quality=50):
+#     """
+#     Decodes a base64 image, compresses it, and returns the compressed image as base64.
+#     Converts RGBA to RpythonGB if necessary (JPEG does not support transparency).
+#     """
+#     try:
+#         # ✅ Decode base64 image into bytes
+#         image_bytes = base64.b64decode(image_base64)
+#         image = Image.open(io.BytesIO(image_bytes))  # ✅ Convert bytes to PIL Image
+
+#         # ✅ Fix: Convert RGBA to RGB before saving as JPEG
+#         if image.mode == "RGBA":
+#             image = image.convert("RGB")
+
+        
+#         output_io = io.BytesIO()
+#         image.save(output_io, format="JPEG", quality=quality,  optimize=True)
+#         output_io.seek(0)
+#         compressed_base64 = base64.b64encode(output_io.getvalue()).decode("utf-8")
+#         return compressed_base64
+#     except Exception as e:
+#         print("Error compressing image:", str(e))
+#         return None
+
+
+
+# API: Create Album
+# @app.route("/create-album", methods=["POST"])
+# def create_album():
+#     name = request.form.get("name")
+#     date = request.form.get("date")
+#     department = request.form.get("department", "")
+#     districts = request.form.get("districts", "")
+
+#     # Handle missing required fields
+#     if not name or not date or 'cover' not in request.files:
+#         return jsonify({"error": "Missing required fields"}), 400
+
+#     cover_file = request.files["cover"]
+#     if not cover_file:
+#         return jsonify({"error": "No cover image uploaded"}), 400
+
+#     try:
+#         # ✅ Compress cover image using PIL
+#         image = Image.open(cover_file.stream)
+#         if image.mode == "RGBA":
+#             image = image.convert("RGB")
+
+#         buffer = io.BytesIO()
+#         image.save(buffer, format="JPEG", quality=50, optimize=True)
+#         buffer.seek(0)
+#         image_bytes = buffer.getvalue()
+#         base64_image = base64.b64encode(image_bytes).decode("utf-8")
+
+#         # ✅ Upload to R2
+#         cover_filename = f"covers/{uuid.uuid4().hex}.jpg"
+#         cover_url = upload_to_r2(base64_image, cover_filename)
+
+#         album = {
+#             "_id": str(uuid.uuid4()),
+#             "name": name,
+#             "date": date,
+#             "cover": cover_url,
+#             "department": department,
+#             "districts": [districts],  # as a list
+#             "photos": []
+#         }
+
+#         albums_collection.insert_one(album)
+#         return jsonify({"message": "Album created successfully"}), 201
+
+#     except Exception as e:
+#         print("❌ Album creation error:", str(e))
+#         return jsonify({"error": "Failed to process cover image"}), 500
+
+
+
+# @app.route("/upload-photo", methods=["POST"])
+# def upload_photo():
+#     user_id = request.form.get("userId")
+#     photo = request.files.get("photo")
+
+#     if not user_id or not photo:
+#         return jsonify({"error": "Missing user ID or photo"}), 400
+
+#     # Convert photo to base64
+#     photo_base64 = base64.b64encode(photo.read()).decode('utf-8')
+
+#     # Update the user's profile with base64 photo
+#     users_collection.update_one({"_id": user_id}, {"$set": {"photo": photo_base64}})
+
+#     return jsonify({"message": "Photo uploaded successfully!", "photo": photo_base64}), 200
+
+
+
+# @app.route("/complete-signup", methods=["POST"])
+# def complete_signup():
+#     data = request.json
+#     required = ("name", "email", "password", "district")
+
+#     if not all(data.get(k) for k in required):
+#         return jsonify()
+
+#     # ✅ Get verified mobile from header or fallback
+#     verified_mobile = request.headers.get("X-Otpless-Mobile") or data.get("mobile")
+
+#     if not verified_mobile:
+#         return jsonify({"error": "Mobile number missing or not verified"}), 400
+
+#     # ✅ Check if already registered
+#     if clients_collection.find_one({"mobile": verified_mobile}):
+#         return jsonify({"error": "Mobile already registered"}), 409
+
+#     try:
+#         with open("public/pro.png", "rb") as f:
+#             photo_base64 = base64.b64encode(f.read()).decode("utf-8")
+#     except:
+#         photo_base64 = ""
+
+#     new_user = {
+#         "_id": str(uuid.uuid4()),
+#         "name": data["name"],
+#         "email": data["email"],
+#         "mobile": verified_mobile,
+#         "district": data["district"],
+#         "role": "User",
+#         "status": True,
+#         "photo": photo_base64,
+#         "password": generate_password_hash(data["password"]),
+#     }
+
+#     clients_collection.insert_one(new_user)
+
+#     return jsonify({
+#         "message": "User registered successfully",
+#         "userId": new_user["_id"],
+#         "name": new_user["name"],
+#         "mobile": new_user["mobile"],
+#         "district": new_user["district"]
+#     }), 200
+
+
+
+# @app.route("/google-login", methods=["POST"]) 
+# def google_login():
+#     data = request.json
+#     email = data.get("email")
+
+#     if not email:
+#         return jsonify({"error": "Email is required"}), 400
+
+#     existing_user = clients_collection.find_one({"email": email})
+    
+#     if existing_user:
+#         if not existing_user.get("status", True):
+#             return jsonify({"error": "Your account is inactive. Please contact admin."}), 403
+#         return jsonify({
+#             "message": "User already exists",
+#             "userId": existing_user["_id"]
+#         }), 200
+
+#     try:
+#         photo = data.get("photo")
+#         if not photo:
+#             with open("public/pro.png", "rb") as f:
+#                 photo = base64.b64encode(f.read()).decode("utf-8")
+
+#         new_user = {
+#             "_id": str(uuid.uuid4()),
+#             "name": data.get("name"),
+#             "email": email,
+#             "mobile": "",
+#             "district": "",
+#             "role": "User",
+#             "status": True,
+#             "photo": photo,
+#             "password": ""
+#         }
+
+#         clients_collection.insert_one(new_user)
+
+#         return jsonify({
+#             "message": "Google user registered",
+#             "userId": new_user["_id"]
+#         }), 201
+
+#     except Exception as e:
+#         print("❌ Error saving Google user:", str(e))
+#         return jsonify({"error": str(e)}), 500
+
+
+
+
+
+# @app.route("/upload-banner", methods=["POST"])
+# def upload_banner():
+#     data = request.json
+#     image_base64 = data.get("image")
+#     title = data.get("title", "Untitled Banner")
+#     size = data.get("size", "")
+
+#     if not image_base64 or not title:
+#         return jsonify({"error": "Missing title or image"}), 400
+
+#     try:
+#         if image_base64.startswith("data:image"):
+#             header, image_base64 = image_base64.split(",", 1)
+#             ext = header.split("/")[1].split(";")[0].lower()
+#             if ext not in ["png", "jpg", "jpeg"]:
+#                 return jsonify({"error": "Unsupported image format"}), 400
+#         else:
+#             return jsonify({"error": "Invalid image data"}), 400
+
+#         filename = f"banners/{uuid.uuid4().hex}.{ext}"
+
+#         # ✅ Decode Base64 and upload to R2
+#         image_data = base64.b64decode(image_base64)
+#         s3_client.put_object(
+#             Bucket=R2_BUCKET_NAME,
+#             Key=filename,
+#             Body=image_data,
+#             ContentType=f"image/{ext}",
+#             ACL='public-read'
+#         )
+#         public_url = f"https://{PUBLIC_BUCKET_DOMAIN}/{filename}"
+
+#         banner_id = str(uuid.uuid4())
+#         banners_collection.insert_one({
+#             "_id": banner_id,
+#             "title": title,
+#             "image": public_url,
+#             "size": size,
+#             "date": datetime.now().strftime("%d/%m/%Y"),
+#         })
+#         return jsonify({"url": public_url, "id": banner_id}), 200
+
+#     except Exception as e:
+#         print("Upload error:", e)
+#         return jsonify({"error": "Internal server error"}), 500
+
+
+
+
+
+
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from pymongo import MongoClient
@@ -1536,25 +1893,59 @@ visitor_collection = auth_db["visitor_logs"]
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "facenet_keras.h5")
 
+# def upload_to_r2(image_input, filename, is_base64=True, content_type="image/jpeg"):
+#     try:
+#         if is_base64:
+#             # If base64, decode first
+#             image_data = base64.b64decode(image_input)
+#         else:
+#             # If already raw bytes, keep as it is
+#             image_data = image_input
+
+#         s3_client.put_object(
+#             Bucket=R2_BUCKET_NAME,
+#             Key=filename,
+#             Body=image_data,
+#             ContentType=content_type,
+#             ACL='public-read'
+#         )
+
+#         public_url = f"https://{PUBLIC_BUCKET_DOMAIN}/{filename}"
+#         return public_url
+#     except Exception as e:
+#         print("❌ Upload to R2 failed:", str(e))
+#         return None
 
 
-def upload_to_r2(base64_image, filename):
+def upload_to_r2(image_input, filename):
     try:
-        image_data = base64.b64decode(base64_image)
+        # Auto-detect Content-Type from file extension
+        ext = filename.split('.')[-1].lower()
+        if ext == "jpg":
+            content_type = "image/jpeg"
+        elif ext == "jpeg":
+            content_type = "image/jpeg"
+        elif ext == "png":
+            content_type = "image/png"
+        else:
+            content_type = "application/octet-stream"  # fallback for unknown types
+
+        # Direct upload without any base64 decoding
         s3_client.put_object(
             Bucket=R2_BUCKET_NAME,
             Key=filename,
-            Body=image_data,
-            ContentType="image/jpeg",
+            Body=image_input,   # 🔥 raw bytes directly
+            ContentType=content_type,
             ACL='public-read'
         )
-        public_url = f"https://{PUBLIC_BUCKET_DOMAIN}/{filename}"
 
+        public_url = f"https://{PUBLIC_BUCKET_DOMAIN}/{filename}"
         return public_url
+
     except Exception as e:
         print("❌ Upload to R2 failed:", str(e))
         return None
-    
+
 
 def delete_from_r2(file_url):
     try:
@@ -1566,33 +1957,6 @@ def delete_from_r2(file_url):
         print(f"✅ Deleted {key} from R2")
     except Exception as e:
         print(f"❌ Failed to delete {file_url}: {str(e)}")
-
-
-# Helper function: Compress Image
-
-# def compress_image(image_base64, quality=50):
-#     """
-#     Decodes a base64 image, compresses it, and returns the compressed image as base64.
-#     Converts RGBA to RpythonGB if necessary (JPEG does not support transparency).
-#     """
-#     try:
-#         # ✅ Decode base64 image into bytes
-#         image_bytes = base64.b64decode(image_base64)
-#         image = Image.open(io.BytesIO(image_bytes))  # ✅ Convert bytes to PIL Image
-
-#         # ✅ Fix: Convert RGBA to RGB before saving as JPEG
-#         if image.mode == "RGBA":
-#             image = image.convert("RGB")
-
-        
-#         output_io = io.BytesIO()
-#         image.save(output_io, format="JPEG", quality=quality,  optimize=True)
-#         output_io.seek(0)
-#         compressed_base64 = base64.b64encode(output_io.getvalue()).decode("utf-8")
-#         return compressed_base64
-#     except Exception as e:
-#         print("Error compressing image:", str(e))
-#         return None
 
 
 
@@ -1681,7 +2045,6 @@ def home():
     return jsonify({"message": "Backend is running successfully!"}), 200
 
 
-# API: Create Album
 @app.route("/create-album", methods=["POST"])
 def create_album():
     name = request.form.get("name")
@@ -1706,13 +2069,11 @@ def create_album():
         buffer = io.BytesIO()
         image.save(buffer, format="JPEG", quality=50, optimize=True)
         buffer.seek(0)
-        image_bytes = buffer.getvalue()
-        base64_image = base64.b64encode(image_bytes).decode("utf-8")
+        compressed_image = buffer.getvalue()  # ✅ get raw bytes, not base64
 
-        # ✅ Upload to R2
+        # ✅ Upload compressed image to R2
         cover_filename = f"covers/{uuid.uuid4().hex}.jpg"
-        cover_url = upload_to_r2(base64_image, cover_filename)
-
+        cover_url = upload_to_r2(compressed_image, cover_filename)
         album = {
             "_id": str(uuid.uuid4()),
             "name": name,
@@ -1729,6 +2090,7 @@ def create_album():
     except Exception as e:
         print("❌ Album creation error:", str(e))
         return jsonify({"error": "Failed to process cover image"}), 500
+
 
 
 
@@ -1757,13 +2119,12 @@ def upload_gallery(album_id):
                     continue
 
                 buffer = io.BytesIO()
-                image.save(buffer, format="JPEG", quality=50, optimize=True)
+                image.save(buffer, format="JPEG", quality=40, optimize=True)
                 buffer.seek(0)
-                compressed_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+                compressed_image = buffer.getvalue()  # ✅ get raw bytes, not base64
 
                 filename = f"gallery/{uuid.uuid4().hex}.jpg"
-                image_url = upload_to_r2(compressed_base64, filename)
-
+                image_url = upload_to_r2(compressed_image, filename)
                 photo = {
                     "photo_id": str(uuid.uuid4()),
                     "image": image_url,
@@ -2055,22 +2416,6 @@ def get_users():
     return jsonify(combined_users)
 
 
-
-@app.route("/upload-photo", methods=["POST"])
-def upload_photo():
-    user_id = request.form.get("userId")
-    photo = request.files.get("photo")
-
-    if not user_id or not photo:
-        return jsonify({"error": "Missing user ID or photo"}), 400
-
-    # Convert photo to base64
-    photo_base64 = base64.b64encode(photo.read()).decode('utf-8')
-
-    # Update the user's profile with base64 photo
-    users_collection.update_one({"_id": user_id}, {"$set": {"photo": photo_base64}})
-
-    return jsonify({"message": "Photo uploaded successfully!", "photo": photo_base64}), 200
 
 
 @app.route("/uploads/<filename>")
@@ -2410,7 +2755,7 @@ def complete_signup():
     required = ("name", "email", "password", "district")
 
     if not all(data.get(k) for k in required):
-        return jsonify()
+        return jsonify({"error": "Missing required fields"}), 400
 
     # ✅ Get verified mobile from header or fallback
     verified_mobile = request.headers.get("X-Otpless-Mobile") or data.get("mobile")
@@ -2422,12 +2767,6 @@ def complete_signup():
     if clients_collection.find_one({"mobile": verified_mobile}):
         return jsonify({"error": "Mobile already registered"}), 409
 
-    try:
-        with open("public/pro.png", "rb") as f:
-            photo_base64 = base64.b64encode(f.read()).decode("utf-8")
-    except:
-        photo_base64 = ""
-
     new_user = {
         "_id": str(uuid.uuid4()),
         "name": data["name"],
@@ -2436,8 +2775,8 @@ def complete_signup():
         "district": data["district"],
         "role": "User",
         "status": True,
-        "photo": photo_base64,
         "password": generate_password_hash(data["password"]),
+       
     }
 
     clients_collection.insert_one(new_user)
@@ -2594,7 +2933,7 @@ def proxy_image():
     
 
 
-@app.route("/google-login", methods=["POST"]) 
+@app.route("/google-login", methods=["POST"])
 def google_login():
     data = request.json
     email = data.get("email")
@@ -2613,10 +2952,7 @@ def google_login():
         }), 200
 
     try:
-        photo = data.get("photo")
-        if not photo:
-            with open("public/pro.png", "rb") as f:
-                photo = base64.b64encode(f.read()).decode("utf-8")
+        photo = data.get("photo")  # ✅ Will be None if not sent by Google
 
         new_user = {
             "_id": str(uuid.uuid4()),
@@ -2626,9 +2962,11 @@ def google_login():
             "district": "",
             "role": "User",
             "status": True,
-            "photo": photo,
-            "password": ""
+            "password": "",
         }
+
+        if photo:  # ✅ Only add photo field if photo is provided
+            new_user["photo"] = photo
 
         clients_collection.insert_one(new_user)
 
@@ -2640,6 +2978,7 @@ def google_login():
     except Exception as e:
         print("❌ Error saving Google user:", str(e))
         return jsonify({"error": str(e)}), 500
+
 
 @app.route("/record-album-view", methods=["POST"])
 def record_album_view():
@@ -2878,37 +3217,34 @@ def get_user_by_email(email):
     }), 200
 
 
+
+
 @app.route("/upload-banner", methods=["POST"])
 def upload_banner():
-    data = request.json
-    image_base64 = data.get("image")
-    title = data.get("title", "Untitled Banner")
-    size = data.get("size", "")
+    if 'image' not in request.files:
+        return jsonify({"error": "Image file is missing"}), 400
 
-    if not image_base64 or not title:
+    image_file = request.files['image']
+    title = request.form.get("title", "Untitled Banner")
+    size = request.form.get("size", "")
+
+    if not image_file or not title:
         return jsonify({"error": "Missing title or image"}), 400
 
     try:
-        if image_base64.startswith("data:image"):
-            header, image_base64 = image_base64.split(",", 1)
-            ext = header.split("/")[1].split(";")[0].lower()
-            if ext not in ["png", "jpg", "jpeg"]:
-                return jsonify({"error": "Unsupported image format"}), 400
-        else:
-            return jsonify({"error": "Invalid image data"}), 400
+        # Get extension from mimetype
+        content_type = image_file.mimetype  # e.g., "image/jpeg"
+        ext = content_type.split("/")[-1].lower()
+
+        if ext not in ["png", "jpg", "jpeg"]:
+            return jsonify({"error": "Unsupported image format"}), 400
 
         filename = f"banners/{uuid.uuid4().hex}.{ext}"
 
-        # ✅ Decode Base64 and upload to R2
-        image_data = base64.b64decode(image_base64)
-        s3_client.put_object(
-            Bucket=R2_BUCKET_NAME,
-            Key=filename,
-            Body=image_data,
-            ContentType=f"image/{ext}",
-            ACL='public-read'
-        )
-        public_url = f"https://{PUBLIC_BUCKET_DOMAIN}/{filename}"
+        # Upload raw file to R2
+        image_bytes = image_file.read()
+        public_url = upload_to_r2(image_bytes, filename)
+
 
         banner_id = str(uuid.uuid4())
         banners_collection.insert_one({
@@ -2918,11 +3254,16 @@ def upload_banner():
             "size": size,
             "date": datetime.now().strftime("%d/%m/%Y"),
         })
+
         return jsonify({"url": public_url, "id": banner_id}), 200
 
     except Exception as e:
         print("Upload error:", e)
         return jsonify({"error": "Internal server error"}), 500
+
+
+
+
 
 @app.route("/get-banners", methods=["GET"])
 def get_banners():
