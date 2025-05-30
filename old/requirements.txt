@@ -1,13 +1,12 @@
-fastapi
-uvicorn
-python-multipart
+
+flask
+flask-cors
 pymongo
 tensorflow==2.19.0
 keras==3.9.2
 deepface==0.0.93
 h5py
 opencv-python
-opencv-python-headless
 scipy
 numpy==1.26.4
 pillow
@@ -17,7 +16,6 @@ gunicorn
 psutil==5.9.8
 boto3
 mtcnn
+opencv-python-headless
 onnxruntime
 rembg
-redis
-rq
