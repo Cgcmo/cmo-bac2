@@ -31,7 +31,8 @@ from botocore.client import Config
 import requests
 from dotenv import load_dotenv
 from pymongo import MongoClient
-# import certifi
+import certifi
+import pymongo
 
 
 # Load .env
@@ -56,8 +57,11 @@ s3_client = boto3.client(
     region_name=R2_REGION,
 )
 
-# MongoDB
-client = MongoClient("mongodb://localhost:27017/")
+client = pymongo.MongoClient(
+    os.getenv("MONGO_DB_URL"),
+    tls=True,
+    tlsCAFile=certifi.where()
+)
 
 photo_gallery_db = client["photo_gallery"]
 albums_collection = photo_gallery_db["albums"]

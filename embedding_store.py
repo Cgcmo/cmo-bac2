@@ -3,9 +3,15 @@
 import numpy as np
 from datetime import datetime
 from pymongo import MongoClient
+import pymongo
+import certifi
 
 # MongoDB connection
-client = MongoClient("mongodb://localhost:27017/")
+client = pymongo.MongoClient(
+    os.getenv("MONGO_DB_URL"),
+    tls=True,
+    tlsCAFile=certifi.where()
+)
 photo_gallery_db = client["photo_gallery"]
 albums_collection = photo_gallery_db["albums"]
 

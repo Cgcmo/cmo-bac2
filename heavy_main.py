@@ -1292,7 +1292,7 @@ from huey import RedisHuey
 from huey.api import Result
 import redis
 from embedding_store import preload_embeddings, photo_embeddings, photo_url_mapping
-
+import pymongo
 
 
 # Load .env
@@ -1320,7 +1320,11 @@ s3_client = boto3.client(
 )
 
 # MongoDB
-client = MongoClient("mongodb://localhost:27017/")
+client = pymongo.MongoClient(
+    os.getenv("MONGO_DB_URL"),
+    tls=True,
+    tlsCAFile=certifi.where()
+)
 redis_client = redis.Redis(host='localhost', port=6379, db=0)
 
 
