@@ -139,39 +139,39 @@ async def home():
 
 # ========== Upload Helpers ==========
 
-# def upload_to_r2(image_input, filename):
-#     try:
-#         ext = filename.split('.')[-1].lower()
-#         if ext in ["jpg", "jpeg"]:
-#             content_type = "image/jpeg"
-#         elif ext == "png":
-#             content_type = "image/png"
-#         else:
-#             content_type = "application/octet-stream"
+def upload_to_r2(image_input, filename):
+    try:
+        ext = filename.split('.')[-1].lower()
+        if ext in ["jpg", "jpeg"]:
+            content_type = "image/jpeg"
+        elif ext == "png":
+            content_type = "image/png"
+        else:
+            content_type = "application/octet-stream"
 
-#         s3_client.put_object(
-#             Bucket=R2_BUCKET_NAME,
-#             Key=filename,
-#             Body=image_input,
-#             ContentType=content_type,
-#             ACL='public-read'
-#         )
+        s3_client.put_object(
+            Bucket=R2_BUCKET_NAME,
+            Key=filename,
+            Body=image_input,
+            ContentType=content_type,
+            ACL='public-read'
+        )
 
-#         public_url = f"https://{PUBLIC_BUCKET_DOMAIN}/{filename}"
-#         return public_url
-#     except Exception as e:
-#         print("❌ Upload to R2 failed:", str(e))
-#         return None
+        public_url = f"https://{PUBLIC_BUCKET_DOMAIN}/{filename}"
+        return public_url
+    except Exception as e:
+        print("❌ Upload to R2 failed:", str(e))
+        return None
 
-# def delete_from_r2(file_url):
-#     try:
-#         if not file_url:
-#             return
-#         key = file_url.split(PUBLIC_BUCKET_DOMAIN + "/")[-1]
-#         s3_client.delete_object(Bucket=R2_BUCKET_NAME, Key=key)
-#         print(f"✅ Deleted {key} from R2")
-#     except Exception as e:
-#         print(f"❌ Failed to delete {file_url}: {str(e)}")
+def delete_from_r2(file_url):
+    try:
+        if not file_url:
+            return
+        key = file_url.split(PUBLIC_BUCKET_DOMAIN + "/")[-1]
+        s3_client.delete_object(Bucket=R2_BUCKET_NAME, Key=key)
+        print(f"✅ Deleted {key} from R2")
+    except Exception as e:
+        print(f"❌ Failed to delete {file_url}: {str(e)}")
 
 
 # # ========== Face Extraction Helper ==========
@@ -775,26 +775,26 @@ async def get_albums_by_district(name: str, page: int = 1, limit: int = 16):
 class AlbumDeleteRequest(BaseModel):
     albumIds: list[str]
 
-@app.delete("/delete-albums")
-async def delete_multiple_albums(data: AlbumDeleteRequest):
-    album_ids = data.albumIds
+# @app.delete("/delete-albums")
+# async def delete_multiple_albums(data: AlbumDeleteRequest):
+#     album_ids = data.albumIds
 
-    if not album_ids:
-        return JSONResponse(content={"error": "No album IDs provided"}, status_code=400)
+#     if not album_ids:
+#         return JSONResponse(content={"error": "No album IDs provided"}, status_code=400)
 
-    try:
-        for album_id in album_ids:
-            album = albums_collection.find_one({"_id": album_id})
-            if album:
-                delete_from_r2(album.get("cover"))
-                for photo in album.get("photos", []):
-                    delete_from_r2(photo.get("image"))
+#     try:
+#         for album_id in album_ids:
+#             album = albums_collection.find_one({"_id": album_id})
+#             if album:
+#                 delete_from_r2(album.get("cover"))
+#                 for photo in album.get("photos", []):
+#                     delete_from_r2(photo.get("image"))
 
-        result = albums_collection.delete_many({"_id": {"$in": album_ids}})
-        return {"message": f"Deleted {result.deleted_count} albums successfully"}
+#         result = albums_collection.delete_many({"_id": {"$in": album_ids}})
+#         return {"message": f"Deleted {result.deleted_count} albums successfully"}
 
-    except Exception as e:
-        return JSONResponse(content={"error": str(e)}, status_code=500)
+#     except Exception as e:
+#         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
 

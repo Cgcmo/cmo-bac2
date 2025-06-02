@@ -5,6 +5,10 @@ from datetime import datetime
 from pymongo import MongoClient
 import pymongo
 import certifi
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # MongoDB connection
 client = pymongo.MongoClient(
