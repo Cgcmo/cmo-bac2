@@ -1555,98 +1555,192 @@ async def create_album(
 
 # ========== Upload Photos to Gallery ==========
 
+
+# Background Task
+@general_huey.task()
+def process_upload_gallery(album_id, image_bytes, filename):
+    from PIL import Image
+    import io
+    import uuid
+    from embedding_store import preload_embeddings
+    import numpy as np
+
+    try:
+        size_kb = len(image_bytes) / 1024
+        size_mb = size_kb / 1024
+        print(f"📦 Received file: {filename} | Size: {size_kb:.2f} KB ({size_mb:.2f} MB)")
+
+        image = Image.open(io.BytesIO(image_bytes))
+
+        try:
+            for orientation in ExifTags.TAGS.keys():
+                if ExifTags.TAGS[orientation] == 'Orientation':
+                    break
+            exif = image._getexif()
+            if exif is not None:
+                orientation_value = exif.get(orientation)
+                if orientation_value == 3:
+                    image = image.rotate(180, expand=True)
+                elif orientation_value == 6:
+                    image = image.rotate(270, expand=True)
+                elif orientation_value == 8:
+                    image = image.rotate(90, expand=True)
+        except Exception as e:
+            print(f"⚠️ EXIF rotation correction failed: {e}")
+
+        if image.mode == "RGBA":
+            image = image.convert("RGB")
+
+        embeddings = extract_faces(image)
+
+        if not embeddings:
+            print(f"❌ No face found in: {filename}")
+            return {"status": "rejected", "filename": filename}
+
+        buffer = io.BytesIO()
+        image.save(buffer, format="JPEG", quality=40, optimize=True)
+        buffer.seek(0)
+        compressed_image = buffer.getvalue()
+
+        upload_filename = f"gallery/{uuid.uuid4().hex}.jpg"
+        image_url = upload_to_r2(compressed_image, upload_filename)
+
+        photo = {
+            "photo_id": str(uuid.uuid4()),
+            "image": image_url,
+            "face_embeddings": embeddings
+        }
+
+        albums_collection.update_one(
+            {"_id": album_id},
+            {
+                "$set": {"last_updated": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")},
+                "$push": {"photos": {"$each": [photo]}}
+            }
+        )
+
+        print("✅ Successfully uploaded:", filename)
+
+        redis_client.set("face_data_dirty", "1")  # Notify for reload
+        return {"status": "uploaded", "filename": filename}
+
+    except Exception as e:
+        print(f"❌ Error in processing {filename}: {e}")
+        return {"status": "error", "filename": filename}
+
+
+# API Route
 @app.post("/upload-gallery/{album_id}")
 async def upload_gallery(album_id: str, photos: List[UploadFile] = File(...)):
     try:
         if not photos:
             return JSONResponse(content={"error": "No files uploaded"}, status_code=400)
 
-        new_photos = []
-        rejected_files = []
-
         for file in photos:
-            try:
-                # ✅ Read and open the uploaded photo
-                image_bytes = await file.read()
-                size_kb = len(image_bytes) / 1024
-                size_mb = size_kb / 1024
-                print(f"📦 Received file: {file.filename} | Size: {size_kb:.2f} KB ({size_mb:.2f} MB)")
-
-                image = Image.open(io.BytesIO(image_bytes))
-                try:
-                    for orientation in ExifTags.TAGS.keys():
-                        if ExifTags.TAGS[orientation] == 'Orientation':
-                            break
-
-                    exif = image._getexif()
-                    if exif is not None:
-                        orientation_value = exif.get(orientation)
-                        if orientation_value == 3:
-                            image = image.rotate(180, expand=True)
-                        elif orientation_value == 6:
-                            image = image.rotate(270, expand=True)
-                        elif orientation_value == 8:
-                            image = image.rotate(90, expand=True)
-                except Exception as e:
-                    print(f"⚠️ EXIF rotation correction failed: {e}")
-
-                
-                if image.mode == "RGBA":
-                    image = image.convert("RGB")
-
-                # ✅ Extract face embeddings
-                embeddings = extract_faces(image)
-
-                if not embeddings:
-                    print(f"❌ No face found in: {file.filename}")
-                    rejected_files.append(file.filename)
-                    continue
-
-                # ✅ Compress image
-                buffer = io.BytesIO()
-                image.save(buffer, format="JPEG", quality=40, optimize=True)
-                buffer.seek(0)
-                compressed_image = buffer.getvalue()
-
-                # ✅ Upload compressed image to R2
-                filename = f"gallery/{uuid.uuid4().hex}.jpg"
-                image_url = upload_to_r2(compressed_image, filename)
-
-                # ✅ Prepare photo record
-                photo = {
-                    "photo_id": str(uuid.uuid4()),
-                    "image": image_url,
-                    "face_embeddings": embeddings
-                }
-                new_photos.append(photo)
-
-            except Exception as e:
-                print(f"❌ Failed to process {file.filename}: {e}")
-                rejected_files.append(file.filename)
-
-        # ✅ Update album in database
-        if new_photos:
-            update_result = albums_collection.update_one(
-                {"_id": album_id},
-                {
-                    "$set": {"last_updated": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")},
-                    "$push": {"photos": {"$each": new_photos}}
-                }
-            )
-            print("Matched:", update_result.matched_count, "| Modified:", update_result.modified_count)
-            preload_embeddings()  # ✅ reload for FastAPI
-            redis_client.set("face_data_dirty", "1")  # ✅ notify queue
-
+            image_bytes = await file.read()
+            process_upload_gallery.schedule(args=(album_id, image_bytes, file.filename), delay=0)
 
         return JSONResponse(content={
-            "message": "Upload complete",
-            "uploaded": len(new_photos),
-            "rejected": rejected_files
-        }, status_code=201)
+            "message": "Images are being processed in background.",
+            "total_images": len(photos)
+        }, status_code=202)
 
     except Exception as e:
         print("❌ Upload failed:", str(e))
         return JSONResponse(content={"error": "Upload failed"}, status_code=500)
+
+# @app.post("/upload-gallery/{album_id}")
+# async def upload_gallery(album_id: str, photos: List[UploadFile] = File(...)):
+#     try:
+#         if not photos:
+#             return JSONResponse(content={"error": "No files uploaded"}, status_code=400)
+
+#         new_photos = []
+#         rejected_files = []
+
+#         for file in photos:
+#             try:
+#                 # ✅ Read and open the uploaded photo
+#                 image_bytes = await file.read()
+#                 size_kb = len(image_bytes) / 1024
+#                 size_mb = size_kb / 1024
+#                 print(f"📦 Received file: {file.filename} | Size: {size_kb:.2f} KB ({size_mb:.2f} MB)")
+
+#                 image = Image.open(io.BytesIO(image_bytes))
+#                 try:
+#                     for orientation in ExifTags.TAGS.keys():
+#                         if ExifTags.TAGS[orientation] == 'Orientation':
+#                             break
+
+#                     exif = image._getexif()
+#                     if exif is not None:
+#                         orientation_value = exif.get(orientation)
+#                         if orientation_value == 3:
+#                             image = image.rotate(180, expand=True)
+#                         elif orientation_value == 6:
+#                             image = image.rotate(270, expand=True)
+#                         elif orientation_value == 8:
+#                             image = image.rotate(90, expand=True)
+#                 except Exception as e:
+#                     print(f"⚠️ EXIF rotation correction failed: {e}")
+
+                
+#                 if image.mode == "RGBA":
+#                     image = image.convert("RGB")
+
+#                 # ✅ Extract face embeddings
+#                 embeddings = extract_faces(image)
+
+#                 if not embeddings:
+#                     print(f"❌ No face found in: {file.filename}")
+#                     rejected_files.append(file.filename)
+#                     continue
+
+#                 # ✅ Compress image
+#                 buffer = io.BytesIO()
+#                 image.save(buffer, format="JPEG", quality=40, optimize=True)
+#                 buffer.seek(0)
+#                 compressed_image = buffer.getvalue()
+
+#                 # ✅ Upload compressed image to R2
+#                 filename = f"gallery/{uuid.uuid4().hex}.jpg"
+#                 image_url = upload_to_r2(compressed_image, filename)
+
+#                 # ✅ Prepare photo record
+#                 photo = {
+#                     "photo_id": str(uuid.uuid4()),
+#                     "image": image_url,
+#                     "face_embeddings": embeddings
+#                 }
+#                 new_photos.append(photo)
+
+#             except Exception as e:
+#                 print(f"❌ Failed to process {file.filename}: {e}")
+#                 rejected_files.append(file.filename)
+
+#         # ✅ Update album in database
+#         if new_photos:
+#             update_result = albums_collection.update_one(
+#                 {"_id": album_id},
+#                 {
+#                     "$set": {"last_updated": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")},
+#                     "$push": {"photos": {"$each": new_photos}}
+#                 }
+#             )
+#             print("Matched:", update_result.matched_count, "| Modified:", update_result.modified_count)
+#             preload_embeddings()  # ✅ reload for FastAPI
+#             redis_client.set("face_data_dirty", "1")  # ✅ notify queue
+
+
+#         return JSONResponse(content={
+#             "message": "Upload complete",
+#             "uploaded": len(new_photos),
+#             "rejected": rejected_files
+#         }, status_code=201)
+
+#     except Exception as e:
+#         print("❌ Upload failed:", str(e))
+#         return JSONResponse(content={"error": "Upload failed"}, status_code=500)
 
 
 
