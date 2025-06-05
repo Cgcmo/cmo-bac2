@@ -22,7 +22,7 @@ from bson.objectid import ObjectId
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
 from deepface.DeepFace import build_model
-from deepface.detectors import FaceDetector
+# from deepface.detectors import FaceDetector
 import boto3
 from botocore.client import Config
 import requests
