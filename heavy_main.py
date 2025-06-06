@@ -215,21 +215,35 @@ def extract_faces(image_pil):
 
         if not faces:
             print("❌ No faces detected.")
-            return []
+            return [],  "NoFaceDetected"
 
         # Step 3: Filter faces with resolution >= 300px
         filtered_faces = []
+        min_size = 200
+        tolerance = 50
+
         for face in faces:
             area = face.get("facial_area", {})
             w, h = area.get("w", 0), area.get("h", 0)
-            if w >= 200 and h >= 200:
+
+            if w >= min_size and h >= min_size:
+                # ✅ Both sides >= 200px
                 filtered_faces.append(face)
+            elif w < min_size and h < min_size:
+                # ❌ Both sides < 200px
+                print(f"⚠️ Skipping face {w}x{h} — both sides < {min_size}px")
+                continue
             else:
-                print(f"⚠️ Skipping face {w}x{h} resolution < 300px")
+                # One side >= 200px, check difference
+                diff = abs(w - h)
+                if diff <= tolerance:
+                    filtered_faces.append(face)  # ✅ Accept
+                else:
+                    print(f"⚠️ Skipping face {w}x{h} — size difference {diff}px > {tolerance}px")
 
         if not filtered_faces:
             print("❌ No faces with required resolution.")
-            return []
+            return [], "LowResolution"
 
         # Step 4: Sort filtered faces by size (area w*h) and pick top 4
         faces_sorted = sorted(
@@ -262,11 +276,11 @@ def extract_faces(image_pil):
 
         print(f"✅ Returning {len(output_faces)} faces with size/resolution.")
 
-        return output_faces
+        return output_faces, None
 
     except Exception as e:
         print("❌ Face extraction failed:", str(e))
-        return []
+        return [], "ExtractionError"
 
     finally:
         # Clean up temp file
@@ -380,13 +394,18 @@ async def upload_gallery(album_id: str, photos: List[UploadFile] = File(...)):
 
                 # ✅ Extract face embeddings
                 loop = asyncio.get_running_loop()
-                embeddings = await loop.run_in_executor(gallery_executor, extract_faces, image)
+                embeddings, extraction_error = await loop.run_in_executor(gallery_executor, extract_faces, image)
 
-
-                if not embeddings:
-                    print(f"❌ No face found in: {file.filename}")
+                if extraction_error == "LowResolution" or extraction_error == "NoFaceDetected":
+                    print(f"❌ Face extraction failed for {file.filename} due to {extraction_error}")
                     rejected_files.append(file.filename)
                     continue
+
+                if not embeddings:
+                    print(f"❌ No embeddings generated for {file.filename}")
+                    rejected_files.append(file.filename)
+                    continue
+
 
                 # ✅ Compress image
                 buffer = io.BytesIO()
@@ -542,11 +561,17 @@ async def search_by_upload(image: UploadFile = File(...)):
 
         # ✅ Extract faces from uploaded image
         loop = asyncio.get_running_loop()
-        query_embeddings = await loop.run_in_executor(face_extract_executor, extract_faces, image_obj)
+        query_embeddings, extraction_error = await loop.run_in_executor(face_extract_executor, extract_faces, image_obj)
 
+
+        if extraction_error == "LowResolution":
+            return JSONResponse(content={"error": "Low resolution image. Please upload a photo with better resolution"}, status_code=400)
+
+        if extraction_error == "NoFaceDetected":
+            return JSONResponse(content={"error": "No face detected. Please upload a clear photo with a visible face."}, status_code=400)
 
         if not query_embeddings:
-            return JSONResponse(content={"error": "No face found in uploaded photo"}, status_code=404)
+            return JSONResponse(content={"error": "Face extraction failed. Try again with another photo."}, status_code=400)
 
         matched_photo_ids = set()
 
@@ -584,7 +609,7 @@ async def search_by_upload(image: UploadFile = File(...)):
 
         if not matched_photo_ids:
             return JSONResponse(
-                content={"error": "No matching faces found in database, either there is no photo of uploaded face or face is not clear"},
+                content={"error": "No matching faces found in database. Try with another image."},
                 status_code=404
             )
 
