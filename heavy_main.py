@@ -222,7 +222,7 @@ def extract_faces(image_pil):
         for face in faces:
             area = face.get("facial_area", {})
             w, h = area.get("w", 0), area.get("h", 0)
-            if w >= 300 and h >= 300:
+            if w >= 200 and h >= 200:
                 filtered_faces.append(face)
             else:
                 print(f"⚠️ Skipping face {w}x{h} resolution < 300px")
