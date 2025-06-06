@@ -219,7 +219,7 @@ def extract_faces(image_pil):
 
         # Step 3: Filter faces with resolution >= 300px
         filtered_faces = []
-        min_size = 200
+        min_size = 180
         tolerance = 50
 
         for face in faces:
