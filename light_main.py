@@ -506,19 +506,60 @@ async def fetch_photos_by_date(data: DateRequest):
 class MasterSearchRequest(BaseModel):
     query: str
 
+# @app.post("/master-search")
+# async def master_search(data: MasterSearchRequest):
+#     query = data.query.strip().lower()
+
+#     if not query:
+#         return JSONResponse(content={"error": "Empty search"}, status_code=400)
+
+#     matching_photos = []
+
+#     albums = albums_collection.find()
+
+#     for album in albums:
+#         # Simple case-insensitive matching
+#         album_name = album.get("name", "").lower()
+#         department = album.get("department", "").lower()
+#         districts = [d.lower() for d in album.get("districts", [])]
+
+#         if (
+#             query in album_name or
+#             query in department or
+#             any(query in d for d in districts)
+#         ):
+#             matched_by = []
+#             if query in album_name:
+#                 matched_by.append("Event")
+#             if query in department:
+#                 matched_by.append("Department")
+#             if any(query in d for d in districts):
+#                 matched_by.append("District")
+
+#             for photo in album.get("photos", []):
+#                 matching_photos.append({
+#                     "photo_id": photo["photo_id"],
+#                     "image": photo["image"],
+#                     "matched_by": matched_by,
+#                     "album_name": album.get("name", ""),
+#                     "department": album.get("department", ""),
+#                     "districts": album.get("districts", [])
+#                 })
+
+#     return {"photos": matching_photos}
+
+
 @app.post("/master-search")
 async def master_search(data: MasterSearchRequest):
     query = data.query.strip().lower()
-
     if not query:
         return JSONResponse(content={"error": "Empty search"}, status_code=400)
 
-    matching_photos = []
+    matching_albums = []
 
     albums = albums_collection.find()
 
     for album in albums:
-        # Simple case-insensitive matching
         album_name = album.get("name", "").lower()
         department = album.get("department", "").lower()
         districts = [d.lower() for d in album.get("districts", [])]
@@ -528,26 +569,17 @@ async def master_search(data: MasterSearchRequest):
             query in department or
             any(query in d for d in districts)
         ):
-            matched_by = []
-            if query in album_name:
-                matched_by.append("Event")
-            if query in department:
-                matched_by.append("Department")
-            if any(query in d for d in districts):
-                matched_by.append("District")
+            matching_albums.append({
+                "album_id": str(album["_id"]),
+                "name": album.get("name", ""),
+                "cover": album.get("cover", ""),
+                "date": album.get("date", ""),
+                "department": album.get("department", ""),
+                "districts": album.get("districts", []),
+                "photo_count": len(album.get("photos", []))
+            })
 
-            for photo in album.get("photos", []):
-                matching_photos.append({
-                    "photo_id": photo["photo_id"],
-                    "image": photo["image"],
-                    "matched_by": matched_by,
-                    "album_name": album.get("name", ""),
-                    "department": album.get("department", ""),
-                    "districts": album.get("districts", [])
-                })
-
-    return {"photos": matching_photos}
-
+    return {"albums": matching_albums}
 
 # class SuggestionRequest(BaseModel):
 #     partialQuery: str
