@@ -71,6 +71,16 @@ dist_and_depart_db = client["dist_and_depart"]
 districts_collection = dist_and_depart_db["districts"]
 departments_collection = dist_and_depart_db["departments"]
 banners_collection = dist_and_depart_db["banners"]
+stories_collection = dist_and_depart_db["story"]
+statuses_collection = dist_and_depart_db["status"]
+notices_collection = dist_and_depart_db["notice"]
+event_updates_collection = dist_and_depart_db["eventupdate"]
+patrika_collection = dist_and_depart_db["patrika"]
+videos_collection = dist_and_depart_db["videos"]
+
+
+
+
 
 auth_db = client["auth_db"]
 users_collection = auth_db["users"]
@@ -139,12 +149,36 @@ def delete_from_r2(file_url):
 
 
 # ========== Get All Albums ==========
+# ========== Get All Albums ==========
 @app.get("/albums")
-async def get_albums(page: int = 1, limit: int = 16):
+async def get_albums(
+    page: int = 1,
+    limit: int = 16,
+    districts: str = "",
+    departments: str = "",
+    from_date: str = "",
+    to_date: str = ""
+):
     try:
         skip = (page - 1) * limit
 
-        albums = albums_collection.aggregate([
+        # Build query
+        query = {}
+
+        if districts:
+            query["districts"] = {"$in": districts.split(",")}
+
+        if departments:
+            query["department"] = {"$in": departments.split(",")}
+
+        # ✅ Use YYYY-MM-DD directly (same format saved in DB when creating albums)
+        if from_date and to_date:
+            query["date"] = {"$gte": from_date, "$lte": to_date}
+
+        total_count = albums_collection.count_documents(query)
+
+        albums = list(albums_collection.aggregate([
+            {"$match": query},
             {"$skip": skip},
             {"$limit": limit},
             {"$project": {
@@ -153,12 +187,10 @@ async def get_albums(page: int = 1, limit: int = 16):
                 "date": 1,
                 "cover": 1,
                 "districts": 1,
+                "department": 1,
                 "photo_count": {"$size": {"$ifNull": ["$photos", []]}}
             }}
-        ])
-        albums = list(albums)
-
-        total_count = albums_collection.count_documents({})
+        ]))
 
         return {
             "albums": albums,
@@ -166,7 +198,6 @@ async def get_albums(page: int = 1, limit: int = 16):
         }
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
-
 
 
 class LoginRequest(BaseModel):
@@ -1279,3 +1310,378 @@ async def get_user_download_count(data: GetUserDownloadCountRequest):
 
 
 
+
+@app.get("/filters")
+async def get_filters():
+    try:
+        # fetch distinct districts from albums OR from the dedicated collection
+        districts = [d["name"] for d in districts_collection.find({}, {"name": 1})]
+
+        # fetch distinct departments
+        departments = [dep["name"] for dep in departments_collection.find({}, {"name": 1})]
+
+        # remove duplicates and sort
+        districts = sorted(list(set(districts)))
+        departments = sorted(list(set(departments)))
+
+        return {
+            "districts": districts,
+            "departments": departments
+        }
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+class StoryUpdateRequest(BaseModel):
+    title: str = None
+    date: str = None
+    desc: str = None
+    image: str = None
+
+
+from fastapi import Depends
+
+async def admin_required(request: Request):
+    user_id = request.headers.get("X-User-Id")
+    if not user_id:
+        return JSONResponse(content={"error": "Unauthorized"}, status_code=401)
+
+    user = users_collection.find_one({"_id": user_id})
+    if not user or user.get("role") != "Admin":
+        return JSONResponse(content={"error": "Forbidden"}, status_code=403)
+    return user
+
+
+
+from fastapi import Form, UploadFile, File
+
+# ========== Create Story (Admin only) ==========
+@app.post("/stories")
+async def create_story(
+    title: str = Form(...),
+    date: str = Form(...),
+    desc: str = Form(...),
+    image: UploadFile = File(...),
+    user=Depends(admin_required)
+):
+    try:
+        file_bytes = await image.read()
+        filename = f"story/{uuid.uuid4().hex}.jpg"
+        image_url = upload_to_r2(file_bytes, filename)
+
+        story_id = str(uuid.uuid4())
+        story = {
+            "_id": story_id,
+            "title": title,
+            "date": date,
+            "desc": desc,
+            "image": image_url
+        }
+        stories_collection.insert_one(story)
+
+        return {"id": story_id, "message": "Story created successfully"}
+
+    except Exception as e:
+        print("❌ Error creating story:", str(e))
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+# ========== Get Stories (Public) ==========
+@app.get("/stories")
+async def get_stories():
+    stories = list(stories_collection.find({}, {"_id": 1, "title": 1, "date": 1, "desc": 1, "image": 1}))
+    formatted = [{"id": str(s["_id"]), **s} for s in stories]
+    return formatted
+
+
+# ========== Update Story (Admin only) ==========
+@app.put("/stories/{story_id}")
+async def update_story(story_id: str, data: StoryUpdateRequest, user=Depends(admin_required)):
+    update_fields = {k: v for k, v in data.dict().items() if v is not None}
+    if not update_fields:
+        return JSONResponse(content={"error": "No fields to update"}, status_code=400)
+
+    result = stories_collection.update_one({"_id": story_id}, {"$set": update_fields})
+    if result.matched_count == 0:
+        return JSONResponse(content={"error": "Story not found"}, status_code=404)
+
+    return {"message": "Story updated successfully"}
+
+
+# ========== Delete Story (Admin only) ==========
+@app.delete("/stories/{story_id}")
+async def delete_story(story_id: str, user=Depends(admin_required)):
+    story = stories_collection.find_one({"_id": story_id})
+    if not story:
+        return JSONResponse(content={"error": "Story not found"}, status_code=404)
+
+    delete_from_r2(story.get("image"))
+    stories_collection.delete_one({"_id": story_id})
+    return {"message": "Story deleted successfully"}
+
+
+
+
+# ---------- Create Status (Admin only) ----------
+# ---------- Create Status (Admin only) ----------
+@app.post("/status")
+async def create_status(
+    title: str = Form(...),
+    image: UploadFile = File(...),
+    user=Depends(admin_required)
+):
+    try:
+        file_bytes = await image.read()
+        filename = f"status/{uuid.uuid4().hex}.jpg"
+        image_url = upload_to_r2(file_bytes, filename)
+
+        status_id = str(uuid.uuid4())
+        status_doc = {
+            "_id": status_id,
+            "title": title,
+            "image": image_url
+        }
+        statuses_collection.insert_one(status_doc)
+
+        return {"id": status_id, "url": image_url, "message": "Status created successfully"}
+    except Exception as e:
+        print("❌ Error creating status:", str(e))
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+
+# ---------- Get Status (Public) ----------
+@app.get("/status")
+async def get_status():
+    statuses = list(statuses_collection.find({}, {"_id": 1, "title": 1, "image": 1}))
+    formatted = [
+        {
+            "id": str(s["_id"]),
+            "title": s.get("title", ""),
+            "image": s.get("image", "")
+        }
+        for s in statuses
+    ]
+    return formatted
+
+
+
+# ---------- Delete Status (Admin only) ----------
+@app.delete("/status/{status_id}")
+async def delete_status(status_id: str, user=Depends(admin_required)):
+    status = statuses_collection.find_one({"_id": status_id})
+    if not status:
+        return JSONResponse(content={"error": "Status not found"}, status_code=404)
+
+    delete_from_r2(status.get("image"))
+    statuses_collection.delete_one({"_id": status_id})
+    return {"message": "Status deleted successfully"}
+
+
+
+# ---------- Create Notice (Admin only) ----------
+@app.post("/notices")
+async def create_notice(
+    title: str = Form(...),
+    date: str = Form(...),
+    pdf: UploadFile = File(...),
+    user=Depends(admin_required)
+):
+    try:
+        if pdf.content_type != "application/pdf":
+            return JSONResponse(content={"error": "Only PDF files allowed"}, status_code=400)
+
+        file_bytes = await pdf.read()
+        filename = f"pdf/{uuid.uuid4().hex}.pdf"
+        pdf_url = upload_to_r2(file_bytes, filename)
+
+        notice_id = str(uuid.uuid4())
+        notice_doc = {
+            "_id": notice_id,
+            "title": title,
+            "date": date,
+            "pdf": pdf_url
+        }
+        notices_collection.insert_one(notice_doc)
+
+        return {"id": notice_id, "url": pdf_url, "message": "Notice created successfully"}
+    except Exception as e:
+        print("❌ Error creating notice:", str(e))
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+# ---------- Get Notices (Public) ----------
+@app.get("/notices")
+async def get_notices():
+    notices = list(notices_collection.find({}, {"_id": 1, "title": 1, "date": 1, "pdf": 1}))
+    formatted = [{"id": str(n["_id"]), **n} for n in notices]
+    return formatted
+
+
+# ---------- Delete Notice (Admin only) ----------
+@app.delete("/notices/{notice_id}")
+async def delete_notice(notice_id: str, user=Depends(admin_required)):
+    notice = notices_collection.find_one({"_id": notice_id})
+    if not notice:
+        return JSONResponse(content={"error": "Notice not found"}, status_code=404)
+
+    delete_from_r2(notice.get("pdf"))
+    notices_collection.delete_one({"_id": notice_id})
+    return {"message": "Notice deleted successfully"}
+
+
+# ========== Event Updates ==========
+
+@app.post("/event-updates")
+async def create_event_update(
+    title: str = Form(...),
+    date: str = Form(...),
+    desc: str = Form(...),
+    image: UploadFile = File(...),
+    user=Depends(admin_required)
+):
+    try:
+        file_bytes = await image.read()
+        filename = f"event_updates/{uuid.uuid4().hex}.jpg"
+        image_url = upload_to_r2(file_bytes, filename)
+
+        event_id = str(uuid.uuid4())
+        doc = {
+            "_id": event_id,
+            "title": title,
+            "date": date,
+            "desc": desc,
+            "image": image_url,
+        }
+        event_updates_collection.insert_one(doc)
+
+        return {"id": event_id, "url": image_url, "message": "Event update created successfully"}
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+@app.get("/event-updates")
+async def get_event_updates():
+    updates = list(event_updates_collection.find({}, {"_id": 1, "title": 1, "date": 1, "desc": 1, "image": 1}))
+    return [{"id": str(u["_id"]), **u} for u in updates]
+
+
+@app.delete("/event-updates/{event_id}")
+async def delete_event_update(event_id: str, user=Depends(admin_required)):
+    event = event_updates_collection.find_one({"_id": event_id})
+    if not event:
+        return JSONResponse(content={"error": "Event update not found"}, status_code=404)
+
+    delete_from_r2(event.get("image"))
+    event_updates_collection.delete_one({"_id": event_id})
+    return {"message": "Event update deleted successfully"}
+
+
+# ---------- Create Patrika (Admin only) ----------
+@app.post("/patrika")
+async def create_patrika(
+    title: str = Form(...),
+    date: str = Form(...),
+    image: UploadFile = File(...),
+    pdf: UploadFile = File(...),
+    user=Depends(admin_required)
+):
+    try:
+        # Upload image
+        img_bytes = await image.read()
+        img_filename = f"patrika/{uuid.uuid4().hex}.jpg"
+        img_url = upload_to_r2(img_bytes, img_filename)
+
+        # Upload PDF
+        if pdf.content_type != "application/pdf":
+            return JSONResponse(content={"error": "Only PDF allowed"}, status_code=400)
+        pdf_bytes = await pdf.read()
+        pdf_filename = f"patrika/{uuid.uuid4().hex}.pdf"
+        pdf_url = upload_to_r2(pdf_bytes, pdf_filename)
+
+        patrika_id = str(uuid.uuid4())
+        patrika_doc = {
+            "_id": patrika_id,
+            "title": title,
+            "date": date,
+            "image": img_url,
+            "pdf": pdf_url
+        }
+        patrika_collection.insert_one(patrika_doc)
+
+        return {"id": patrika_id, "imageUrl": img_url, "pdfUrl": pdf_url}
+    except Exception as e:
+        print("❌ Error creating patrika:", str(e))
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+# ---------- Get Patrika (Public) ----------
+@app.get("/patrika")
+async def get_patrika():
+    pat = list(patrika_collection.find({}, {"_id": 1, "title": 1, "date": 1, "image": 1, "pdf": 1}))
+    return [{"id": str(p["_id"]), **p} for p in pat]
+
+
+# ---------- Delete Patrika (Admin only) ----------
+@app.delete("/patrika/{patrika_id}")
+async def delete_patrika(patrika_id: str, user=Depends(admin_required)):
+    doc = patrika_collection.find_one({"_id": patrika_id})
+    if not doc:
+        return JSONResponse(content={"error": "Not found"}, status_code=404)
+
+    delete_from_r2(doc.get("image"))
+    delete_from_r2(doc.get("pdf"))
+    patrika_collection.delete_one({"_id": patrika_id})
+    return {"message": "Patrika deleted successfully"}
+
+
+# ---------- Create Video (Admin only) ----------
+@app.post("/videos")
+async def create_video(
+    title: str = Form(...),
+    desc: str = Form(...),
+    link: str = Form(...),              # embedded link (e.g. YouTube embed url)
+    image: UploadFile = File(...),      # cover image
+    user=Depends(admin_required)
+):
+    try:
+        # Upload cover image to R2/videos/
+        file_bytes = await image.read()
+        filename = f"videos/{uuid.uuid4().hex}.jpg"
+        image_url = upload_to_r2(file_bytes, filename)
+
+        video_id = str(uuid.uuid4())
+        video_doc = {
+            "_id": video_id,
+            "title": title,
+            "desc": desc,
+            "link": link,
+            "image": image_url,
+        }
+        videos_collection.insert_one(video_doc)
+
+        return {"id": video_id, "imageUrl": image_url, "message": "Video created successfully"}
+
+    except Exception as e:
+        print("❌ Error creating video:", str(e))
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+# ---------- Get Videos (Public) ----------
+@app.get("/videos")
+async def get_videos():
+    videos = list(videos_collection.find({}, {"_id": 1, "title": 1, "desc": 1, "link": 1, "image": 1}))
+    return [{"id": str(v["_id"]), **v} for v in videos]
+
+
+# ---------- Delete Video (Admin only) ----------
+@app.delete("/videos/{video_id}")
+async def delete_video(video_id: str, user=Depends(admin_required)):
+    doc = videos_collection.find_one({"_id": video_id})
+    if not doc:
+        return JSONResponse(content={"error": "Video not found"}, status_code=404)
+
+    # delete cover image from R2
+    delete_from_r2(doc.get("image"))
+    videos_collection.delete_one({"_id": video_id})
+    return {"message": "Video deleted successfully"}
