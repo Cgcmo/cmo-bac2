@@ -625,3 +625,58 @@ async def search_by_upload(image: UploadFile = File(...)):
         request_semaphore.release()
 
 
+
+@app.post("/edit-album/{album_id}")
+async def edit_album(
+    album_id: str,
+    name: str = Form(None),
+    cover: UploadFile = File(None)
+):
+    try:
+        update_fields = {}
+
+        # Find current album (so we can delete old cover if needed)
+        album = albums_collection.find_one({"_id": album_id})
+        if not album:
+            return JSONResponse(content={"error": "Album not found"}, status_code=404)
+
+        # If new name provided
+        if name:
+            update_fields["name"] = name
+
+        # If new cover provided
+        if cover:
+            image = Image.open(cover.file)
+            if image.mode == "RGBA":
+                image = image.convert("RGB")
+            
+            buffer = io.BytesIO()
+            image.save(buffer, format="JPEG", quality=50, optimize=True)
+            buffer.seek(0)
+            compressed_image = buffer.getvalue()
+
+            # Upload new cover to R2
+            cover_filename = f"covers/{uuid.uuid4().hex}.jpg"
+            cover_url = upload_to_r2(compressed_image, cover_filename)
+
+            # Delete old cover from R2
+            old_cover_url = album.get("cover")
+            if old_cover_url:
+                delete_from_r2(old_cover_url)
+
+            # Update with new cover
+            update_fields["cover"] = cover_url
+
+        if not update_fields:
+            return JSONResponse(content={"error": "No updates provided"}, status_code=400)
+
+        albums_collection.update_one(
+            {"_id": album_id},
+            {"$set": update_fields}
+        )
+
+        return {"message": "Album updated successfully", "updates": update_fields}
+
+    except Exception as e:
+        print("❌ Album update error:", str(e))
+        return JSONResponse(content={"error": "Failed to update album"}, status_code=500)
