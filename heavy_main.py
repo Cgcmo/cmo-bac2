@@ -295,6 +295,7 @@ async def create_album(
     date: str = Form(...),
     department: str = Form(""),
     districts: str = Form(""),
+    with_cm: str = Form("without"),
     cover: UploadFile = File(...)
 ):
     try:
@@ -334,6 +335,7 @@ async def create_album(
             "cover": cover_url,
             "department": department,
             "districts": [districts],
+             "with_cm": with_cm,
             "photos": [],
             "last_updated": now 
         }

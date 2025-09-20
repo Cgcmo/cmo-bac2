@@ -77,7 +77,7 @@ notices_collection = dist_and_depart_db["notice"]
 event_updates_collection = dist_and_depart_db["eventupdate"]
 patrika_collection = dist_and_depart_db["patrika"]
 videos_collection = dist_and_depart_db["videos"]
-
+ytlive_collection = dist_and_depart_db["ytlive"]
 
 
 
@@ -157,7 +157,8 @@ async def get_albums(
     districts: str = "",
     departments: str = "",
     from_date: str = "",
-    to_date: str = ""
+    to_date: str = "",
+    with_cm: str = "" 
 ):
     try:
         skip = (page - 1) * limit
@@ -170,6 +171,9 @@ async def get_albums(
 
         if departments:
             query["department"] = {"$in": departments.split(",")}
+        
+        if with_cm:   # 👈 Filter by CM category
+            query["with_cm"] = with_cm
 
         # ✅ Use YYYY-MM-DD directly (same format saved in DB when creating albums)
         if from_date and to_date:
@@ -1178,8 +1182,31 @@ async def update_user(user_id: str, data: UpdateUserRequest):
     return {"message": "User updated successfully"}
 
 
+# @app.get("/users")
+# async def get_users():
+#     projection = {"name": 1, "email": 1, "mobile": 1, "district": 1, "role": 1, "status": 1}
+
+#     users = list(users_collection.find({}, projection))
+#     clients = list(clients_collection.find({}, projection))
+
+#     combined_users = users + clients
+
+#     for user in combined_users:
+#         user["_id"] = str(user["_id"])
+#         user["role"] = user.get("role", "User")
+#         user["status"] = user.get("status", True)
+#         user["mobile"] = user.get("mobile") or "Gmail User"
+#         user["district"] = user.get("district") or "Gmail User"
+
+#     return combined_users
+
+
 @app.get("/users")
-async def get_users():
+async def get_users(
+    filter: str = Query("All"),
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100)
+):
     projection = {"name": 1, "email": 1, "mobile": 1, "district": 1, "role": 1, "status": 1}
 
     users = list(users_collection.find({}, projection))
@@ -1187,6 +1214,7 @@ async def get_users():
 
     combined_users = users + clients
 
+    # Normalize fields
     for user in combined_users:
         user["_id"] = str(user["_id"])
         user["role"] = user.get("role", "User")
@@ -1194,8 +1222,22 @@ async def get_users():
         user["mobile"] = user.get("mobile") or "Gmail User"
         user["district"] = user.get("district") or "Gmail User"
 
-    return combined_users
+    # ✅ Apply filter server-side
+    if filter == "Admin":
+        combined_users = [u for u in combined_users if u["role"] == "Admin"]
+    elif filter == "User":
+        combined_users = [u for u in combined_users if u["role"] == "User"]
+    elif filter == "Limited Access":
+        combined_users = [u for u in combined_users if not u["status"]]
 
+    total = len(combined_users)
+
+    # ✅ Apply pagination
+    start = (page - 1) * limit
+    end = start + limit
+    paginated = combined_users[start:end]
+
+    return {"users": paginated, "total": total}
 
 
 # @app.get("/uploads/{filename}")
@@ -1350,75 +1392,6 @@ async def admin_required(request: Request):
     if not user or user.get("role") != "Admin":
         return JSONResponse(content={"error": "Forbidden"}, status_code=403)
     return user
-
-
-
-from fastapi import Form, UploadFile, File
-
-# ========== Create Story (Admin only) ==========
-@app.post("/stories")
-async def create_story(
-    title: str = Form(...),
-    date: str = Form(...),
-    desc: str = Form(...),
-    image: UploadFile = File(...),
-    user=Depends(admin_required)
-):
-    try:
-        file_bytes = await image.read()
-        filename = f"story/{uuid.uuid4().hex}.jpg"
-        image_url = upload_to_r2(file_bytes, filename)
-
-        story_id = str(uuid.uuid4())
-        story = {
-            "_id": story_id,
-            "title": title,
-            "date": date,
-            "desc": desc,
-            "image": image_url
-        }
-        stories_collection.insert_one(story)
-
-        return {"id": story_id, "message": "Story created successfully"}
-
-    except Exception as e:
-        print("❌ Error creating story:", str(e))
-        return JSONResponse(content={"error": str(e)}, status_code=500)
-
-
-# ========== Get Stories (Public) ==========
-@app.get("/stories")
-async def get_stories():
-    stories = list(stories_collection.find({}, {"_id": 1, "title": 1, "date": 1, "desc": 1, "image": 1}))
-    formatted = [{"id": str(s["_id"]), **s} for s in stories]
-    return formatted
-
-
-# ========== Update Story (Admin only) ==========
-@app.put("/stories/{story_id}")
-async def update_story(story_id: str, data: StoryUpdateRequest, user=Depends(admin_required)):
-    update_fields = {k: v for k, v in data.dict().items() if v is not None}
-    if not update_fields:
-        return JSONResponse(content={"error": "No fields to update"}, status_code=400)
-
-    result = stories_collection.update_one({"_id": story_id}, {"$set": update_fields})
-    if result.matched_count == 0:
-        return JSONResponse(content={"error": "Story not found"}, status_code=404)
-
-    return {"message": "Story updated successfully"}
-
-
-# ========== Delete Story (Admin only) ==========
-@app.delete("/stories/{story_id}")
-async def delete_story(story_id: str, user=Depends(admin_required)):
-    story = stories_collection.find_one({"_id": story_id})
-    if not story:
-        return JSONResponse(content={"error": "Story not found"}, status_code=404)
-
-    delete_from_r2(story.get("image"))
-    stories_collection.delete_one({"_id": story_id})
-    return {"message": "Story deleted successfully"}
-
 
 
 
@@ -1685,3 +1658,79 @@ async def delete_video(video_id: str, user=Depends(admin_required)):
     delete_from_r2(doc.get("image"))
     videos_collection.delete_one({"_id": video_id})
     return {"message": "Video deleted successfully"}
+
+
+
+
+# ---------- Create Live Stream (Admin only) ----------
+@app.post("/ytlive")
+async def create_live_stream(
+    title: str = Form(...),
+    link: str = Form(...),
+    image: UploadFile = File(...),
+    status: bool = Form(True),   # default True
+    user=Depends(admin_required)
+):
+    try:
+        # ✅ Upload image to R2
+        file_bytes = await image.read()
+        filename = f"ytlive/{uuid.uuid4().hex}.jpg"
+        image_url = upload_to_r2(file_bytes, filename)
+
+        # ✅ If status is True, set all others to False
+        if status:
+            ytlive_collection.update_many({}, {"$set": {"status": False}})
+
+        live_id = str(uuid.uuid4())
+        live_doc = {
+            "_id": live_id,
+            "title": title,
+            "link": link,
+            "image": image_url,
+            "status": status,
+            "createdAt": datetime.utcnow()
+        }
+        ytlive_collection.insert_one(live_doc)
+
+        return {"id": live_id, "url": image_url, "message": "Live stream added successfully"}
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+
+# ---------- Get Live Streams (Public) ----------
+@app.get("/ytlive")
+async def get_live_streams():
+    streams = list(ytlive_collection.find({}, {"_id": 1, "title": 1, "link": 1, "image": 1, "status": 1, "createdAt": 1}))
+    return [{"id": str(s["_id"]), **s} for s in streams]
+
+
+# ---------- Delete Live Stream (Admin only) ----------
+@app.delete("/ytlive/{stream_id}")
+async def delete_live_stream(stream_id: str, user=Depends(admin_required)):
+    doc = ytlive_collection.find_one({"_id": stream_id})
+    if not doc:
+        return JSONResponse(content={"error": "Stream not found"}, status_code=404)
+
+    ytlive_collection.delete_one({"_id": stream_id})
+    return {"message": "Live stream deleted successfully"}
+
+
+@app.put("/ytlive/{stream_id}/status")
+async def update_live_status(stream_id: str, status: bool = Form(...), user=Depends(admin_required)):
+    try:
+        if status:
+            # ✅ deactivate all other streams
+            ytlive_collection.update_many({}, {"$set": {"status": False}})
+
+        result = ytlive_collection.update_one(
+            {"_id": stream_id},
+            {"$set": {"status": status}}
+        )
+
+        if result.matched_count == 0:
+            return JSONResponse(content={"error": "Stream not found"}, status_code=404)
+
+        return {"message": "Status updated successfully"}
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
