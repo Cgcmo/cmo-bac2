@@ -1205,7 +1205,9 @@ async def update_user(user_id: str, data: UpdateUserRequest):
 async def get_users(
     filter: str = Query("All"),
     page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=100)
+    limit: int = Query(10, ge=1, le=100),
+     search: str = Query(None),  
+    mobile: str = Query(None)    
 ):
     projection = {"name": 1, "email": 1, "mobile": 1, "district": 1, "role": 1, "status": 1}
 
@@ -1229,6 +1231,15 @@ async def get_users(
         combined_users = [u for u in combined_users if u["role"] == "User"]
     elif filter == "Limited Access":
         combined_users = [u for u in combined_users if not u["status"]]
+
+     if search:
+        combined_users = [u for u in combined_users if search.lower() in u["name"].lower()]
+    # if mobile:
+    #     combined_users = [u for u in combined_users if str(u["mobile"]) == str(mobile)]
+    if mobile:
+    combined_users = [u for u in combined_users if mobile in str(u["mobile"])]
+
+
 
     total = len(combined_users)
 
