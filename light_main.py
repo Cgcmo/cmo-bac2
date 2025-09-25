@@ -1201,13 +1201,63 @@ async def update_user(user_id: str, data: UpdateUserRequest):
 #     return combined_users
 
 
+# @app.get("/users")
+# async def get_users(
+#     filter: str = Query("All"),
+#     page: int = Query(1, ge=1),
+#     limit: int = Query(10, ge=1, le=100),
+#      search: str = Query(None),  
+#     mobile: str = Query(None)    
+# ):
+#     projection = {"name": 1, "email": 1, "mobile": 1, "district": 1, "role": 1, "status": 1}
+
+#     users = list(users_collection.find({}, projection))
+#     clients = list(clients_collection.find({}, projection))
+
+#     combined_users = users + clients
+
+#     # Normalize fields
+#     for user in combined_users:
+#         user["_id"] = str(user["_id"])
+#         user["role"] = user.get("role", "User")
+#         user["status"] = user.get("status", True)
+#         user["mobile"] = user.get("mobile") or "Gmail User"
+#         user["district"] = user.get("district") or "Gmail User"
+
+#     # ✅ Apply filter server-side
+#     if filter == "Admin":
+#         combined_users = [u for u in combined_users if u["role"] == "Admin"]
+#     elif filter == "User":
+#         combined_users = [u for u in combined_users if u["role"] == "User"]
+#     elif filter == "Limited Access":
+#         combined_users = [u for u in combined_users if not u["status"]]
+
+#      if search:
+#         combined_users = [u for u in combined_users if search.lower() in u["name"].lower()]
+#     # if mobile:
+#     #     combined_users = [u for u in combined_users if str(u["mobile"]) == str(mobile)]
+#     if mobile:
+#     combined_users = [u for u in combined_users if mobile in str(u["mobile"])]
+
+
+
+#     total = len(combined_users)
+
+#     # ✅ Apply pagination
+#     start = (page - 1) * limit
+#     end = start + limit
+#     paginated = combined_users[start:end]
+
+#     return {"users": paginated, "total": total}
+
+
 @app.get("/users")
 async def get_users(
     filter: str = Query("All"),
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
-     search: str = Query(None),  
-    mobile: str = Query(None)    
+    search: str = Query(None),
+    mobile: str = Query(None)
 ):
     projection = {"name": 1, "email": 1, "mobile": 1, "district": 1, "role": 1, "status": 1}
 
@@ -1232,14 +1282,11 @@ async def get_users(
     elif filter == "Limited Access":
         combined_users = [u for u in combined_users if not u["status"]]
 
-     if search:
+    if search:
         combined_users = [u for u in combined_users if search.lower() in u["name"].lower()]
-    # if mobile:
-    #     combined_users = [u for u in combined_users if str(u["mobile"]) == str(mobile)]
+
     if mobile:
-    combined_users = [u for u in combined_users if mobile in str(u["mobile"])]
-
-
+        combined_users = [u for u in combined_users if mobile in str(u["mobile"])]
 
     total = len(combined_users)
 
