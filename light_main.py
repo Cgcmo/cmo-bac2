@@ -1282,11 +1282,18 @@ async def get_users(
     elif filter == "Limited Access":
         combined_users = [u for u in combined_users if not u["status"]]
 
-    if search:
-        combined_users = [u for u in combined_users if search.lower() in u["name"].lower()]
+    # if search:
+    #     combined_users = [u for u in combined_users if search.lower() in u["name"].lower()]
 
-    if mobile:
-        combined_users = [u for u in combined_users if mobile in str(u["mobile"])]
+    # if mobile:
+    #     combined_users = [u for u in combined_users if mobile in str(u["mobile"])]
+
+    if search:
+    combined_users = [
+        u for u in combined_users
+        if search.lower() in u["name"].lower() or search in str(u["mobile"])
+    ]
+
 
     total = len(combined_users)
 
