@@ -1289,7 +1289,7 @@ async def get_users(
     #     combined_users = [u for u in combined_users if mobile in str(u["mobile"])]
 
     if search:
-    combined_users = [
+        combined_users = [
         u for u in combined_users
         if search.lower() in u["name"].lower() or search in str(u["mobile"])
     ]
