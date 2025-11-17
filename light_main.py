@@ -1462,28 +1462,71 @@ async def admin_required(request: Request):
 
 
 # ---------- Create Status (Admin only) ----------
+# @app.post("/status")
+# async def create_status(
+#     title: str = Form(...),
+#     image: UploadFile = File(...),
+#     user=Depends(admin_required)
+# ):
+#     try:
+#         file_bytes = await image.read()
+#         filename = f"status/{uuid.uuid4().hex}.jpg"
+#         image_url = upload_to_r2(file_bytes, filename)
+
+#         status_id = str(uuid.uuid4())
+#         status_doc = {
+#             "_id": status_id,
+#             "title": title,
+#             "image": image_url
+#         }
+#         statuses_collection.insert_one(status_doc)
+
+#         return {"id": status_id, "url": image_url, "message": "Status created successfully"}
+#     except Exception as e:
+#         print("❌ Error creating status:", str(e))
+#         return JSONResponse(content={"error": str(e)}, status_code=500)
+
+# ---------- Create Multiple Status (Admin only) ----------
 @app.post("/status")
-async def create_status(
+async def create_multiple_status(
     title: str = Form(...),
-    image: UploadFile = File(...),
+    images: list[UploadFile] = File(...),
     user=Depends(admin_required)
 ):
     try:
-        file_bytes = await image.read()
-        filename = f"status/{uuid.uuid4().hex}.jpg"
-        image_url = upload_to_r2(file_bytes, filename)
+        created_statuses = []
 
-        status_id = str(uuid.uuid4())
-        status_doc = {
-            "_id": status_id,
-            "title": title,
-            "image": image_url
+        for image in images:
+            file_bytes = await image.read()
+
+            ext = image.filename.split(".")[-1].lower()
+            if ext not in ["jpg", "jpeg", "png"]:
+                continue
+
+            filename = f"status/{uuid.uuid4().hex}.{ext}"
+            image_url = upload_to_r2(file_bytes, filename)
+
+            status_id = str(uuid.uuid4())
+            status_doc = {
+                "_id": status_id,
+                "title": title,
+                "image": image_url
+            }
+
+            statuses_collection.insert_one(status_doc)
+
+            created_statuses.append({
+                "id": status_id,
+                "url": image_url
+            })
+
+        return {
+            "message": f"{len(created_statuses)} statuses created",
+            "statuses": created_statuses
         }
-        statuses_collection.insert_one(status_doc)
 
-        return {"id": status_id, "url": image_url, "message": "Status created successfully"}
     except Exception as e:
-        print("❌ Error creating status:", str(e))
+        print("❌ Error creating statuses:", str(e))
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
