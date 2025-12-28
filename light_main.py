@@ -33,6 +33,7 @@ import certifi
 import pymongo
 from fastapi import Form
 from fastapi import UploadFile, File
+import time
 
 
 
@@ -109,6 +110,79 @@ async def handle_options_request(full_path: str, request: Request):
 @app.get("/")
 async def home():
     return {"message": "Backend is running successfully!"}
+
+
+YT_CACHE = {
+    "data": None,
+    "last_fetch": 0
+}
+
+@app.get("/ytlive")
+async def get_youtube_live():
+    """
+    Auto:
+    - Live running → return live
+    - Else → return last uploaded video
+    Cache: 60 sec
+    """
+    now = time.time()
+
+    # ✅ Cache for 60 seconds
+    if YT_CACHE["data"] and now - YT_CACHE["last_fetch"] < 60:
+        return YT_CACHE["data"]
+
+    API_KEY = os.getenv("YOUTUBE_API_KEY")
+    CHANNEL_ID = os.getenv("YOUTUBE_CHANNEL_ID")
+
+    # 🔴 1. Check LIVE
+    live_url = "https://www.googleapis.com/youtube/v3/search"
+    live_params = {
+        "part": "snippet",
+        "channelId": CHANNEL_ID,
+        "eventType": "live",
+        "type": "video",
+        "maxResults": 1,
+        "key": API_KEY
+    }
+
+    live_res = requests.get(live_url, params=live_params).json()
+
+    if live_res.get("items"):
+        v = live_res["items"][0]
+        data = [{
+            "status": True,
+            "title": v["snippet"]["title"],
+            "link": f"https://www.youtube.com/watch?v={v['id']['videoId']}",
+            "image": v["snippet"]["thumbnails"]["high"]["url"]
+        }]
+        YT_CACHE.update({"data": data, "last_fetch": now})
+        return data
+
+    # 🟡 2. Else → latest video / last live
+    latest_params = {
+        "part": "snippet",
+        "channelId": CHANNEL_ID,
+        "order": "date",
+        "type": "video",
+        "maxResults": 1,
+        "key": API_KEY
+    }
+
+    latest_res = requests.get(live_url, params=latest_params).json()
+
+    if latest_res.get("items"):
+        v = latest_res["items"][0]
+        data = [{
+            "status": False,
+            "title": v["snippet"]["title"],
+            "link": f"https://www.youtube.com/watch?v={v['id']['videoId']}",
+            "image": v["snippet"]["thumbnails"]["high"]["url"]
+        }]
+        YT_CACHE.update({"data": data, "last_fetch": now})
+        return data
+
+    return []
+
 
 
 # ========== Upload Helpers ==========
@@ -1771,46 +1845,46 @@ async def delete_video(video_id: str, user=Depends(admin_required)):
 
 
 # ---------- Create Live Stream (Admin only) ----------
-@app.post("/ytlive")
-async def create_live_stream(
-    title: str = Form(...),
-    link: str = Form(...),
-    image: UploadFile = File(...),
-    status: bool = Form(True),   # default True
-    user=Depends(admin_required)
-):
-    try:
-        # ✅ Upload image to R2
-        file_bytes = await image.read()
-        filename = f"ytlive/{uuid.uuid4().hex}.jpg"
-        image_url = upload_to_r2(file_bytes, filename)
+# @app.post("/ytlive")
+# async def create_live_stream(
+#     title: str = Form(...),
+#     link: str = Form(...),
+#     image: UploadFile = File(...),
+#     status: bool = Form(True),   # default True
+#     user=Depends(admin_required)
+# ):
+#     try:
+#         # ✅ Upload image to R2
+#         file_bytes = await image.read()
+#         filename = f"ytlive/{uuid.uuid4().hex}.jpg"
+#         image_url = upload_to_r2(file_bytes, filename)
 
-        # ✅ If status is True, set all others to False
-        if status:
-            ytlive_collection.update_many({}, {"$set": {"status": False}})
+#         # ✅ If status is True, set all others to False
+#         if status:
+#             ytlive_collection.update_many({}, {"$set": {"status": False}})
 
-        live_id = str(uuid.uuid4())
-        live_doc = {
-            "_id": live_id,
-            "title": title,
-            "link": link,
-            "image": image_url,
-            "status": status,
-            "createdAt": datetime.utcnow()
-        }
-        ytlive_collection.insert_one(live_doc)
+#         live_id = str(uuid.uuid4())
+#         live_doc = {
+#             "_id": live_id,
+#             "title": title,
+#             "link": link,
+#             "image": image_url,
+#             "status": status,
+#             "createdAt": datetime.utcnow()
+#         }
+#         ytlive_collection.insert_one(live_doc)
 
-        return {"id": live_id, "url": image_url, "message": "Live stream added successfully"}
-    except Exception as e:
-        return JSONResponse(content={"error": str(e)}, status_code=500)
+#         return {"id": live_id, "url": image_url, "message": "Live stream added successfully"}
+#     except Exception as e:
+#         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
 
-# ---------- Get Live Streams (Public) ----------
-@app.get("/ytlive")
-async def get_live_streams():
-    streams = list(ytlive_collection.find({}, {"_id": 1, "title": 1, "link": 1, "image": 1, "status": 1, "createdAt": 1}))
-    return [{"id": str(s["_id"]), **s} for s in streams]
+# # ---------- Get Live Streams (Public) ----------
+# @app.get("/ytlive")
+# async def get_live_streams():
+#     streams = list(ytlive_collection.find({}, {"_id": 1, "title": 1, "link": 1, "image": 1, "status": 1, "createdAt": 1}))
+#     return [{"id": str(s["_id"]), **s} for s in streams]
 
 
 # ---------- Delete Live Stream (Admin only) ----------
