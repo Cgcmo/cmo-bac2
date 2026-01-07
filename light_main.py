@@ -183,10 +183,10 @@ async def home():
 
 #     return []
 
-YT_CACHE = {
-    "data": None,
-    "last_fetch": 0
-}
+# YT_CACHE = {
+#     "data": None,
+#     "last_fetch": 0
+# }
 
 # @app.get("/ytlive")
 # async def get_youtube_live():
