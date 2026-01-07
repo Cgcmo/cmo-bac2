@@ -112,6 +112,77 @@ async def home():
     return {"message": "Backend is running successfully!"}
 
 
+# YT_CACHE = {
+#     "data": None,
+#     "last_fetch": 0
+# }
+
+# @app.get("/ytlive")
+# async def get_youtube_live():
+#     """
+#     Auto:
+#     - Live running → return live
+#     - Else → return last uploaded video
+#     Cache: 60 sec
+#     """
+#     now = time.time()
+
+#     # ✅ Cache for 60 seconds
+#     if YT_CACHE["data"] and now - YT_CACHE["last_fetch"] < 60:
+#         return YT_CACHE["data"]
+
+#     API_KEY = os.getenv("YOUTUBE_API_KEY")
+#     CHANNEL_ID = os.getenv("YOUTUBE_CHANNEL_ID")
+
+#     # 🔴 1. Check LIVE
+#     live_url = "https://www.googleapis.com/youtube/v3/search"
+#     live_params = {
+#         "part": "snippet",
+#         "channelId": CHANNEL_ID,
+#         "eventType": "live",
+#         "type": "video",
+#         "maxResults": 1,
+#         "key": API_KEY
+#     }
+
+#     live_res = requests.get(live_url, params=live_params).json()
+
+#     if live_res.get("items"):
+#         v = live_res["items"][0]
+#         data = [{
+#             "status": True,
+#             "title": v["snippet"]["title"],
+#             "link": f"https://www.youtube.com/watch?v={v['id']['videoId']}",
+#             "image": v["snippet"]["thumbnails"]["high"]["url"]
+#         }]
+#         YT_CACHE.update({"data": data, "last_fetch": now})
+#         return data
+
+#     # 🟡 2. Else → latest video / last live
+#     latest_params = {
+#         "part": "snippet",
+#         "channelId": CHANNEL_ID,
+#         "order": "date",
+#         "type": "video",
+#         "maxResults": 1,
+#         "key": API_KEY
+#     }
+
+#     latest_res = requests.get(live_url, params=latest_params).json()
+
+#     if latest_res.get("items"):
+#         v = latest_res["items"][0]
+#         data = [{
+#             "status": False,
+#             "title": v["snippet"]["title"],
+#             "link": f"https://www.youtube.com/watch?v={v['id']['videoId']}",
+#             "image": v["snippet"]["thumbnails"]["high"]["url"]
+#         }]
+#         YT_CACHE.update({"data": data, "last_fetch": now})
+#         return data
+
+#     return []
+
 YT_CACHE = {
     "data": None,
     "last_fetch": 0
@@ -120,10 +191,12 @@ YT_CACHE = {
 @app.get("/ytlive")
 async def get_youtube_live():
     """
-    Auto:
-    - Live running → return live
-    - Else → return last uploaded video
-    Cache: 60 sec
+    Priority:
+    1. Live running
+    2. Upcoming (scheduled)
+    3. Latest uploaded video
+
+    Cache: 60 seconds
     """
     now = time.time()
 
@@ -134,8 +207,11 @@ async def get_youtube_live():
     API_KEY = os.getenv("YOUTUBE_API_KEY")
     CHANNEL_ID = os.getenv("YOUTUBE_CHANNEL_ID")
 
-    # 🔴 1. Check LIVE
-    live_url = "https://www.googleapis.com/youtube/v3/search"
+    search_url = "https://www.googleapis.com/youtube/v3/search"
+
+    # =========================================================
+    # 🔴 1. CHECK CURRENTLY LIVE
+    # =========================================================
     live_params = {
         "part": "snippet",
         "channelId": CHANNEL_ID,
@@ -145,20 +221,57 @@ async def get_youtube_live():
         "key": API_KEY
     }
 
-    live_res = requests.get(live_url, params=live_params).json()
+    live_res = requests.get(search_url, params=live_params).json()
 
     if live_res.get("items"):
         v = live_res["items"][0]
+        video_id = v["id"]["videoId"]
+
         data = [{
-            "status": True,
+            "status": "live",
             "title": v["snippet"]["title"],
-            "link": f"https://www.youtube.com/watch?v={v['id']['videoId']}",
+            "videoId": video_id,
+            "watchUrl": f"https://www.youtube.com/watch?v={video_id}",
+            "embedUrl": f"https://www.youtube.com/embed/{video_id}",
             "image": v["snippet"]["thumbnails"]["high"]["url"]
         }]
+
         YT_CACHE.update({"data": data, "last_fetch": now})
         return data
 
-    # 🟡 2. Else → latest video / last live
+    # =========================================================
+    # 🟡 2. CHECK UPCOMING (SCHEDULED LIVE)
+    # =========================================================
+    upcoming_params = {
+        "part": "snippet",
+        "channelId": CHANNEL_ID,
+        "eventType": "upcoming",
+        "type": "video",
+        "maxResults": 1,
+        "key": API_KEY
+    }
+
+    upcoming_res = requests.get(search_url, params=upcoming_params).json()
+
+    if upcoming_res.get("items"):
+        v = upcoming_res["items"][0]
+        video_id = v["id"]["videoId"]
+
+        data = [{
+            "status": "upcoming",
+            "title": v["snippet"]["title"],
+            "videoId": video_id,
+            "watchUrl": f"https://www.youtube.com/watch?v={video_id}",
+            "embedUrl": f"https://www.youtube.com/embed/{video_id}",
+            "image": v["snippet"]["thumbnails"]["high"]["url"]
+        }]
+
+        YT_CACHE.update({"data": data, "last_fetch": now})
+        return data
+
+    # =========================================================
+    # ⚪ 3. FALLBACK → LATEST UPLOADED VIDEO
+    # =========================================================
     latest_params = {
         "part": "snippet",
         "channelId": CHANNEL_ID,
@@ -168,22 +281,25 @@ async def get_youtube_live():
         "key": API_KEY
     }
 
-    latest_res = requests.get(live_url, params=latest_params).json()
+    latest_res = requests.get(search_url, params=latest_params).json()
 
     if latest_res.get("items"):
         v = latest_res["items"][0]
+        video_id = v["id"]["videoId"]
+
         data = [{
-            "status": False,
+            "status": "video",
             "title": v["snippet"]["title"],
-            "link": f"https://www.youtube.com/watch?v={v['id']['videoId']}",
+            "videoId": video_id,
+            "watchUrl": f"https://www.youtube.com/watch?v={video_id}",
+            "embedUrl": f"https://www.youtube.com/embed/{video_id}",
             "image": v["snippet"]["thumbnails"]["high"]["url"]
         }]
+
         YT_CACHE.update({"data": data, "last_fetch": now})
         return data
 
     return []
-
-
 
 # ========== Upload Helpers ==========
 
