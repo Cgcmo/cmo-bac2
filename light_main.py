@@ -21,7 +21,9 @@ import os
 # import numpy as np
 # from bson.objectid import ObjectId
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime, timedelta
+# from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
 # from deepface.DeepFace import build_model
 # from deepface.detectors import FaceDetector
 import boto3
@@ -174,7 +176,7 @@ async def get_youtube_live():
         published = recent_res["items"][0]["snippet"]["publishedAt"]
         published_time = datetime.fromisoformat(published.replace("Z", "+00:00"))
 
-        if datetime.utcnow() - published_time < timedelta(minutes=5):
+        if datetime.now(timezone.utc) - published_time < timedelta(minutes=5):
             data = {"status": "ENDED"}
             YT_CACHE.update({"data": data, "last_fetch": now})
             return data
