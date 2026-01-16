@@ -118,18 +118,17 @@ YT_CACHE = {
     "last_fetch": 0
 }
 
+
 @app.get("/ytlive")
 async def get_youtube_live():
     """
-    YouTube Live Status API
-    Returns:
-    - LIVE
-    - ENDED
-    - NONE
+    Priority:
+    1. Currently LIVE stream
+    2. Last completed LIVE stream (automatic)
+    3. NONE
     """
     now = time.time()
 
-    # Cache for 60 seconds
     if YT_CACHE["data"] and now - YT_CACHE["last_fetch"] < 60:
         return YT_CACHE["data"]
 
@@ -137,8 +136,11 @@ async def get_youtube_live():
     CHANNEL_ID = os.getenv("YOUTUBE_CHANNEL_ID")
 
     search_url = "https://www.googleapis.com/youtube/v3/search"
+    videos_url = "https://www.googleapis.com/youtube/v3/videos"
 
-    # 1️⃣ CHECK LIVE
+    # -------------------------------------------------
+    # 1️⃣ CHECK CURRENTLY LIVE
+    # -------------------------------------------------
     live_res = requests.get(search_url, params={
         "part": "snippet",
         "channelId": CHANNEL_ID,
@@ -162,29 +164,119 @@ async def get_youtube_live():
         YT_CACHE.update({"data": data, "last_fetch": now})
         return data
 
-    # 2️⃣ CHECK IF RECENT LIVE JUST ENDED (last 5 minutes)
-    recent_res = requests.get(search_url, params={
-        "part": "snippet",
+    # -------------------------------------------------
+    # 2️⃣ FIND LAST COMPLETED LIVE (correct way)
+    # -------------------------------------------------
+    latest_res = requests.get(search_url, params={
+        "part": "id",
         "channelId": CHANNEL_ID,
         "order": "date",
         "type": "video",
-        "maxResults": 1,
+        "maxResults": 5,
         "key": API_KEY
     }).json()
 
-    if recent_res.get("items"):
-        published = recent_res["items"][0]["snippet"]["publishedAt"]
-        published_time = datetime.fromisoformat(published.replace("Z", "+00:00"))
+    video_ids = [
+        item["id"]["videoId"]
+        for item in latest_res.get("items", [])
+    ]
 
-        if datetime.now(timezone.utc) - published_time < timedelta(minutes=5):
-            data = {"status": "ENDED"}
-            YT_CACHE.update({"data": data, "last_fetch": now})
-            return data
+    if video_ids:
+        details_res = requests.get(videos_url, params={
+            "part": "snippet,liveStreamingDetails",
+            "id": ",".join(video_ids),
+            "key": API_KEY
+        }).json()
 
-    # 3️⃣ NO LIVE
+        for v in details_res.get("items", []):
+            live_details = v.get("liveStreamingDetails")
+            if live_details and live_details.get("actualEndTime"):
+                video_id = v["id"]
+
+                data = {
+                    "status": "RECORDED",
+                    "videoId": video_id,
+                    "title": v["snippet"]["title"],
+                    "embedUrl": f"https://www.youtube.com/embed/{video_id}"
+                }
+
+                YT_CACHE.update({"data": data, "last_fetch": now})
+                return data
+
+    # -------------------------------------------------
+    # 3️⃣ NOTHING FOUND
+    # -------------------------------------------------
     data = {"status": "NONE"}
     YT_CACHE.update({"data": data, "last_fetch": now})
     return data
+
+# @app.get("/ytlive")
+# async def get_youtube_live():
+#     """
+#     YouTube Live Status API
+#     Returns:
+#     - LIVE
+#     - ENDED
+#     - NONE
+#     """
+#     now = time.time()
+
+#     # Cache for 60 seconds
+#     if YT_CACHE["data"] and now - YT_CACHE["last_fetch"] < 60:
+#         return YT_CACHE["data"]
+
+#     API_KEY = os.getenv("YOUTUBE_API_KEY")
+#     CHANNEL_ID = os.getenv("YOUTUBE_CHANNEL_ID")
+
+#     search_url = "https://www.googleapis.com/youtube/v3/search"
+
+#     # 1️⃣ CHECK LIVE
+#     live_res = requests.get(search_url, params={
+#         "part": "snippet",
+#         "channelId": CHANNEL_ID,
+#         "eventType": "live",
+#         "type": "video",
+#         "maxResults": 1,
+#         "key": API_KEY
+#     }).json()
+
+#     if live_res.get("items"):
+#         v = live_res["items"][0]
+#         video_id = v["id"]["videoId"]
+
+#         data = {
+#             "status": "LIVE",
+#             "videoId": video_id,
+#             "title": v["snippet"]["title"],
+#             "embedUrl": f"https://www.youtube.com/embed/{video_id}"
+#         }
+
+#         YT_CACHE.update({"data": data, "last_fetch": now})
+#         return data
+
+#     # 2️⃣ CHECK IF RECENT LIVE JUST ENDED (last 5 minutes)
+#     recent_res = requests.get(search_url, params={
+#         "part": "snippet",
+#         "channelId": CHANNEL_ID,
+#         "order": "date",
+#         "type": "video",
+#         "maxResults": 1,
+#         "key": API_KEY
+#     }).json()
+
+#     if recent_res.get("items"):
+#         published = recent_res["items"][0]["snippet"]["publishedAt"]
+#         published_time = datetime.fromisoformat(published.replace("Z", "+00:00"))
+
+#         if datetime.now(timezone.utc) - published_time < timedelta(minutes=5):
+#             data = {"status": "ENDED"}
+#             YT_CACHE.update({"data": data, "last_fetch": now})
+#             return data
+
+#     # 3️⃣ NO LIVE
+#     data = {"status": "NONE"}
+#     YT_CACHE.update({"data": data, "last_fetch": now})
+#     return data
 
 
     
