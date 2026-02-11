@@ -85,11 +85,13 @@ ytlive_collection = dist_and_depart_db["ytlive"]
 
 
 
+
 auth_db = client["auth_db"]
 users_collection = auth_db["users"]
 clients_collection = auth_db["clients"]
 download_count_collection = auth_db["download-count"]
 visitor_collection = auth_db["visitor_logs"]
+otp_collection = auth_db["otp_verifications"]
 
 # FastAPI app
 app = FastAPI()
@@ -2129,3 +2131,80 @@ async def update_live_status(stream_id: str, status: bool = Form(...), user=Depe
         return {"message": "Status updated successfully"}
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+
+
+def send_sms_otp(mobile: str, otp: str):
+    url = os.getenv("SMS_API_URL")
+
+    params = {
+        "username": os.getenv("SMS_USERNAME"),
+        "password": os.getenv("SMS_PASSWORD"),
+        "sender": os.getenv("SMS_SENDER"),
+        "to": mobile,   # 👈 DO NOT prefix +91 here
+        "message": f"{otp} is the OTP to verify your mobile number with HamarCm. It will expire by today",
+        "reqid": str(int(time.time())),
+        "format": "json",
+        "route_id": os.getenv("SMS_ROUTE_ID"),
+        "Template_ID": os.getenv("SMS_TEMPLATE_ID"),
+        "PE_ID": os.getenv("SMS_PE_ID"),
+    }
+
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        return response.text   # 👈 IMPORTANT: text, not json()
+    except Exception as e:
+        return str(e)
+
+
+
+class SendOtpRequest(BaseModel):
+    mobile: str
+
+
+@app.post("/send-otp")
+async def send_otp(data: SendOtpRequest):
+
+    otp = str(uuid.uuid4().int)[0:6]
+
+    # Delete old OTP if exists
+    otp_collection.delete_many({"mobile": data.mobile})
+
+    # Save new OTP
+    otp_collection.insert_one({
+        "mobile": data.mobile,
+        "otp": otp,
+        "created_at": datetime.utcnow()
+    })
+
+    sms_response = send_sms_otp(data.mobile, otp)
+
+    return {
+        "message": "OTP sent",
+        "sms_response": sms_response
+    }
+
+class VerifyOtpRequest(BaseModel):
+    mobile: str
+    otp: str
+
+
+@app.post("/verify-otp")
+async def verify_otp(data: VerifyOtpRequest):
+
+    record = otp_collection.find_one({
+        "mobile": data.mobile,
+        "otp": data.otp
+    })
+
+    if not record:
+        return JSONResponse(
+            content={"error": "Invalid OTP"},
+            status_code=400
+        )
+
+    # If found → delete OTP
+    otp_collection.delete_one({"_id": record["_id"]})
+
+    return {"message": "OTP verified successfully"}
