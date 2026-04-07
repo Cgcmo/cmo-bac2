@@ -819,7 +819,7 @@ print(f"✅ Preloaded {len(photo_embeddings)} photos and {embedding_counter} emb
 app = FastAPI()
 MAX_UPLOAD_QUEUE = 22
 upload_gallery_semaphore = asyncio.BoundedSemaphore(MAX_UPLOAD_QUEUE)
-gallery_executor = ThreadPoolExecutor(max_workers=1) 
+gallery_executor = ThreadPoolExecutor(max_workers=4) #
 face_extract_executor = ThreadPoolExecutor(max_workers=2)
 request_semaphore = asyncio.BoundedSemaphore(666)
 
