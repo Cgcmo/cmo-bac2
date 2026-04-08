@@ -1064,6 +1064,7 @@ def get_error_message(error):
 
 @app.post("/upload-gallery/{album_id}")
 async def upload_gallery(album_id: str, photos: List[UploadFile] = File(...)):
+
     try:
         await upload_gallery_semaphore.acquire()
     except ValueError:
@@ -1075,6 +1076,125 @@ async def upload_gallery(album_id: str, photos: List[UploadFile] = File(...)):
 
         new_photos = []
         rejected_files = []
+
+        # ✅ MAIN LOOP
+        for file in photos:
+            try:
+                image_bytes = await file.read()
+                image_hash = get_image_hash(image_bytes)
+
+                # ✅ Duplicate hash check
+                duplicate = albums_collection.find_one({"photos.hash": image_hash})
+                if duplicate:
+                    rejected_files.append({
+                        "file": file.filename,
+                        "reason": get_error_message("DuplicateImage")
+                    })
+                    continue
+
+                image = Image.open(io.BytesIO(image_bytes))
+
+                if image.mode == "RGBA":
+                    image = image.convert("RGB")
+
+                # ✅ Face extraction
+                loop = asyncio.get_running_loop()
+                embeddings, extraction_error = await loop.run_in_executor(
+                    gallery_executor, extract_faces, image
+                )
+
+                if extraction_error in ["LowResolution", "NoFaceDetected"]:
+                    rejected_files.append({
+                        "file": file.filename,
+                        "reason": get_error_message(extraction_error)
+                    })
+                    continue
+
+                if not embeddings:
+                    rejected_files.append({
+                        "file": file.filename,
+                        "reason": get_error_message("NoEmbeddings")
+                    })
+                    continue
+
+                # ✅ Duplicate embedding check
+                is_duplicate = False
+                for emb in embeddings:
+                    for faces in photo_embeddings.values():
+                        if is_duplicate_embedding(emb["embedding"], faces):
+                            is_duplicate = True
+                            break
+                    if is_duplicate:
+                        break
+
+                if is_duplicate:
+                    rejected_files.append({
+                        "file": file.filename,
+                        "reason": get_error_message("DuplicateEmbedding")
+                    })
+                    continue
+
+                # ✅ Compress & Upload
+                buffer = io.BytesIO()
+                image.save(buffer, format="JPEG", quality=40, optimize=True)
+                buffer.seek(0)
+
+                filename = f"gallery/{uuid.uuid4().hex}.jpg"
+                image_url = upload_to_r2(buffer.getvalue(), filename)
+
+                photo = {
+                    "photo_id": str(uuid.uuid4()),
+                    "image": image_url,
+                    "hash": image_hash,
+                    "face_embeddings": embeddings
+                }
+
+                new_photos.append(photo)
+
+            except Exception as e:
+                print(f"❌ Failed to process {file.filename}: {e}")
+                rejected_files.append({
+                    "file": file.filename,
+                    "reason": get_error_message("ProcessingError")
+                })
+
+        # ✅ AFTER LOOP (IMPORTANT FIX)
+        if new_photos:
+            now = datetime.utcnow()
+            albums_collection.update_one(
+                {"_id": album_id},
+                {
+                    "$push": {"photos": {"$each": new_photos}},
+                    "$set": {"last_updated": now}
+                }
+            )
+
+        return JSONResponse(content={
+            "message": "Upload complete",
+            "uploaded": len(new_photos),
+            "rejected": rejected_files
+        }, status_code=201)
+
+    except Exception as e:
+        print("❌ Upload failed:", str(e))
+        return JSONResponse(content={"error": "Upload failed"}, status_code=500)
+
+    finally:
+        upload_gallery_semaphore.release()
+
+# @app.post("/upload-gallery/{album_id}")
+# async def upload_gallery(album_id: str, photos: List[UploadFile] = File(...)):
+#     try:
+#         await upload_gallery_semaphore.acquire()
+#     except ValueError:
+#         raise HTTPException(status_code=503, detail="Server busy. Try again later.")
+
+#     try:
+#         if not photos:
+#             return JSONResponse(content={"error": "No files uploaded"}, status_code=400)
+
+#         new_photos = []
+#         rejected_files = []
 
 #         for file in photos:
 #             try:
@@ -1184,109 +1304,109 @@ async def upload_gallery(album_id: str, photos: List[UploadFile] = File(...)):
 #             except Exception as e:
 #                 print(f"❌ Failed to process {file.filename}: {e}")
 #                 rejected_files.append(file.filename)for file in photos:
-    try:
-        image_bytes = await file.read()
+    # try:
+    #     image_bytes = await file.read()
 
-        image_hash = get_image_hash(image_bytes)
+    #     image_hash = get_image_hash(image_bytes)
 
-        # ✅ DUPLICATE HASH CHECK
-        duplicate = albums_collection.find_one({"photos.hash": image_hash})
-        if duplicate:
-            rejected_files.append({
-                "file": file.filename,
-                "reason": get_error_message("DuplicateImage")
-            })
-            continue
+    #     # ✅ DUPLICATE HASH CHECK
+    #     duplicate = albums_collection.find_one({"photos.hash": image_hash})
+    #     if duplicate:
+    #         rejected_files.append({
+    #             "file": file.filename,
+    #             "reason": get_error_message("DuplicateImage")
+    #         })
+    #         continue
 
-        image = Image.open(io.BytesIO(image_bytes))
+    #     image = Image.open(io.BytesIO(image_bytes))
 
-        if image.mode == "RGBA":
-            image = image.convert("RGB")
+    #     if image.mode == "RGBA":
+    #         image = image.convert("RGB")
 
-        # ✅ FACE EXTRACTION
-        loop = asyncio.get_running_loop()
-        embeddings, extraction_error = await loop.run_in_executor(
-            gallery_executor, extract_faces, image
-        )
+    #     # ✅ FACE EXTRACTION
+    #     loop = asyncio.get_running_loop()
+    #     embeddings, extraction_error = await loop.run_in_executor(
+    #         gallery_executor, extract_faces, image
+    #     )
 
-        if extraction_error in ["LowResolution", "NoFaceDetected"]:
-            rejected_files.append({
-                "file": file.filename,
-                "reason": get_error_message(extraction_error)
-            })
-            continue
+    #     if extraction_error in ["LowResolution", "NoFaceDetected"]:
+    #         rejected_files.append({
+    #             "file": file.filename,
+    #             "reason": get_error_message(extraction_error)
+    #         })
+    #         continue
 
-        if not embeddings:
-            rejected_files.append({
-                "file": file.filename,
-                "reason": get_error_message("NoEmbeddings")
-            })
-            continue
+    #     if not embeddings:
+    #         rejected_files.append({
+    #             "file": file.filename,
+    #             "reason": get_error_message("NoEmbeddings")
+    #         })
+    #         continue
 
-        # ✅ DUPLICATE EMBEDDING CHECK
-        is_duplicate = False
-        for emb in embeddings:
-            for faces in photo_embeddings.values():
-                if is_duplicate_embedding(emb["embedding"], faces):
-                    is_duplicate = True
-                    break
-            if is_duplicate:
-                break
+    #     # ✅ DUPLICATE EMBEDDING CHECK
+    #     is_duplicate = False
+    #     for emb in embeddings:
+    #         for faces in photo_embeddings.values():
+    #             if is_duplicate_embedding(emb["embedding"], faces):
+    #                 is_duplicate = True
+    #                 break
+    #         if is_duplicate:
+    #             break
 
-        if is_duplicate:
-            rejected_files.append({
-                "file": file.filename,
-                "reason": get_error_message("DuplicateEmbedding")
-            })
-            continue
+    #     if is_duplicate:
+    #         rejected_files.append({
+    #             "file": file.filename,
+    #             "reason": get_error_message("DuplicateEmbedding")
+    #         })
+    #         continue
 
-        # ✅ SAVE IMAGE
-        buffer = io.BytesIO()
-        image.save(buffer, format="JPEG", quality=40, optimize=True)
-        buffer.seek(0)
+    #     # ✅ SAVE IMAGE
+    #     buffer = io.BytesIO()
+    #     image.save(buffer, format="JPEG", quality=40, optimize=True)
+    #     buffer.seek(0)
 
-        filename = f"gallery/{uuid.uuid4().hex}.jpg"
-        image_url = upload_to_r2(buffer.getvalue(), filename)
+    #     filename = f"gallery/{uuid.uuid4().hex}.jpg"
+    #     image_url = upload_to_r2(buffer.getvalue(), filename)
 
-        photo = {
-            "photo_id": str(uuid.uuid4()),
-            "image": image_url,
-            "hash": image_hash,
-            "face_embeddings": embeddings
-        }
+    #     photo = {
+    #         "photo_id": str(uuid.uuid4()),
+    #         "image": image_url,
+    #         "hash": image_hash,
+    #         "face_embeddings": embeddings
+    #     }
 
-        new_photos.append(photo)
+    #     new_photos.append(photo)
 
-    except Exception as e:
-        print(f"❌ Failed to process {file.filename}: {e}")
-        rejected_files.append({
-            "file": file.filename,
-            "reason": get_error_message("ProcessingError")
-        })
+    # except Exception as e:
+    #     print(f"❌ Failed to process {file.filename}: {e}")
+    #     rejected_files.append({
+    #         "file": file.filename,
+    #         "reason": get_error_message("ProcessingError")
+    #     })
       
 
-        # ✅ Update album in database
-        if new_photos:
-            now = datetime.utcnow()
-            albums_collection.update_one(
-                {"_id": album_id},
-                {"$push": {"photos": {"$each": new_photos}},
-                 "$set": {"last_updated": now} 
-                }
-            )
+    #     # ✅ Update album in database
+    #     if new_photos:
+    #         now = datetime.utcnow()
+    #         albums_collection.update_one(
+    #             {"_id": album_id},
+    #             {"$push": {"photos": {"$each": new_photos}},
+    #              "$set": {"last_updated": now} 
+    #             }
+    #         )
 
-        return JSONResponse(content={
-            "message": "Upload complete",
-            "uploaded": len(new_photos),
-            "rejected": rejected_files
-        }, status_code=201)
+    #     return JSONResponse(content={
+    #         "message": "Upload complete",
+    #         "uploaded": len(new_photos),
+    #         "rejected": rejected_files
+    #     }, status_code=201)
 
-    except Exception as e:
-        print("❌ Upload failed:", str(e))
-        return JSONResponse(content={"error": "Upload failed"}, status_code=500)
+    # except Exception as e:
+    #     print("❌ Upload failed:", str(e))
+    #     return JSONResponse(content={"error": "Upload failed"}, status_code=500)
     
-    finally:
-        upload_gallery_semaphore.release()
+    # finally:
+    #     upload_gallery_semaphore.release()
 
 @app.post("/reload-embeddings")
 async def reload_embeddings():
