@@ -400,7 +400,7 @@
 
 #                 if extraction_error == "LowResolution" or extraction_error == "NoFaceDetected":
 #                     print(f"❌ Face extraction failed for {file.filename} due to {extraction_error}")
-#                     rejected_files.append(file.filename)
+                    # rejected_files.append(file.filename)
 #                     continue
 
 #                 if not embeddings:
@@ -1048,6 +1048,17 @@ async def create_album(
         print("❌ Album creation error:", str(e))
         return JSONResponse(content={"error": "Failed to process cover image"}, status_code=500)
 
+def get_error_message(error):
+    return {
+        "NoFaceDetected": "No face detected",
+        "LowResolution": "Face too small / low quality",
+        "ExtractionError": "Face extraction failed",
+        "DuplicateImage": "Duplicate image",
+        "DuplicateEmbedding": "Same person already exists",
+        "NoEmbeddings": "No face embeddings generated",
+        "ProcessingError": "Image processing failed"
+    }.get(error, "Unknown error")
+
 
 # # ========== Upload Photos to Gallery ==========
 
@@ -1065,97 +1076,194 @@ async def upload_gallery(album_id: str, photos: List[UploadFile] = File(...)):
         new_photos = []
         rejected_files = []
 
-        for file in photos:
-            try:
-                # ✅ Read and open the uploaded photo
-                image_bytes = await file.read()
-                size_kb = len(image_bytes) / 1024
-                size_mb = size_kb / 1024
-                print(f"📦 Received file: {file.filename} | Size: {size_kb:.2f} KB ({size_mb:.2f} MB)")
+#         for file in photos:
+#             try:
+#                 # ✅ Read and open the uploaded photo
+#                 image_bytes = await file.read()
+#                 size_kb = len(image_bytes) / 1024
+#                 size_mb = size_kb / 1024
+#                 print(f"📦 Received file: {file.filename} | Size: {size_kb:.2f} KB ({size_mb:.2f} MB)")
 
-                image_hash = get_image_hash(image_bytes)
+#                 image_hash = get_image_hash(image_bytes)
 
-                duplicate = albums_collection.find_one({"photos.hash": image_hash})
-                if duplicate:
-                    print(f"⚠️ Duplicate image detected (hash match): {file.filename}")
-                    rejected_files.append(file.filename)
-                    continue
+#                 duplicate = albums_collection.find_one({"photos.hash": image_hash})
+#                 if duplicate:
+#                     print(f"⚠️ Duplicate image detected (hash match): {file.filename}")
+#                     # rejected_files.append(file.filename)
+#                  rejected_files.append({
+#     "file": file.filename,
+#     "reason": get_error_message("DuplicateImage")
+# })
+#                     continue
 
 
-                image = Image.open(io.BytesIO(image_bytes))
-                try:
-                    for orientation in ExifTags.TAGS.keys():
-                        if ExifTags.TAGS[orientation] == 'Orientation':
-                            break
+#                 image = Image.open(io.BytesIO(image_bytes))
+#                 try:
+#                     for orientation in ExifTags.TAGS.keys():
+#                         if ExifTags.TAGS[orientation] == 'Orientation':
+#                             break
 
-                    exif = image._getexif()
-                    if exif is not None:
-                        orientation_value = exif.get(orientation)
-                        if orientation_value == 3:
-                            image = image.rotate(180, expand=True)
-                        elif orientation_value == 6:
-                            image = image.rotate(270, expand=True)
-                        elif orientation_value == 8:
-                            image = image.rotate(90, expand=True)
-                except Exception as e:
-                    print(f"⚠️ EXIF rotation correction failed: {e}")
+#                     exif = image._getexif()
+#                     if exif is not None:
+#                         orientation_value = exif.get(orientation)
+#                         if orientation_value == 3:
+#                             image = image.rotate(180, expand=True)
+#                         elif orientation_value == 6:
+#                             image = image.rotate(270, expand=True)
+#                         elif orientation_value == 8:
+#                             image = image.rotate(90, expand=True)
+#                 except Exception as e:
+#                     print(f"⚠️ EXIF rotation correction failed: {e}")
 
                 
-                if image.mode == "RGBA":
-                    image = image.convert("RGB")
+#                 if image.mode == "RGBA":
+#                     image = image.convert("RGB")
 
-                # ✅ Extract face embeddings
-                loop = asyncio.get_running_loop()
-                embeddings, extraction_error = await loop.run_in_executor(gallery_executor, extract_faces, image)
+#                 # ✅ Extract face embeddings
+#                 loop = asyncio.get_running_loop()
+#                 embeddings, extraction_error = await loop.run_in_executor(gallery_executor, extract_faces, image)
 
-                if extraction_error == "LowResolution" or extraction_error == "NoFaceDetected":
-                    print(f"❌ Face extraction failed for {file.filename} due to {extraction_error}")
-                    rejected_files.append(file.filename)
-                    continue
+#                 if extraction_error == "LowResolution" or extraction_error == "NoFaceDetected":
+#                     print(f"❌ Face extraction failed for {file.filename} due to {extraction_error}")
+#                     # rejected_files.append(file.filename)
+#                 rejected_files.append({
+#     "file": file.filename,
+#     "reason": get_error_message(extraction_error)
+# })
+#                     continue
 
-                if not embeddings:
-                    print(f"❌ No embeddings generated for {file.filename}")
-                    rejected_files.append(file.filename)
-                    continue
+#                 if not embeddings:
+#                     print(f"❌ No embeddings generated for {file.filename}")
+#                     # rejected_files.append(file.filename)
+#                       rejected_files.append({
+#     "file": file.filename,
+#     "reason": get_error_message("NoEmbeddings")
+# })
+#                     continue
 
-                                # ✅ Embedding-level duplicate check
-                is_duplicate = False
-                for emb in embeddings:
-                    for faces in photo_embeddings.values():
-                        if is_duplicate_embedding(emb["embedding"], faces):
-                            is_duplicate = True
-                            break
-                    if is_duplicate:
-                        break
+#                                 # ✅ Embedding-level duplicate check
+#                 is_duplicate = False
+#                 for emb in embeddings:
+#                     for faces in photo_embeddings.values():
+#                         if is_duplicate_embedding(emb["embedding"], faces):
+#                             is_duplicate = True
+#                             break
+#                     if is_duplicate:
+#                         break
 
-                if is_duplicate:
-                    print(f"⚠️ Duplicate embedding detected for {file.filename}")
-                    rejected_files.append(file.filename)
-                    continue
+#                 if is_duplicate:
+#                     print(f"⚠️ Duplicate embedding detected for {file.filename}")
+#                     # rejected_files.append(file.filename)
+#   rejected_files.append({
+#     "file": file.filename,
+#     "reason": get_error_message("DuplicateImage")
+# })
+                  
+#                     continue
 
 
-                # ✅ Compress image
-                buffer = io.BytesIO()
-                image.save(buffer, format="JPEG", quality=40, optimize=True)
-                buffer.seek(0)
-                compressed_image = buffer.getvalue()
+#                 # ✅ Compress image
+#                 buffer = io.BytesIO()
+#                 image.save(buffer, format="JPEG", quality=40, optimize=True)
+#                 buffer.seek(0)
+#                 compressed_image = buffer.getvalue()
 
-                # ✅ Upload compressed image to R2
-                filename = f"gallery/{uuid.uuid4().hex}.jpg"
-                image_url = upload_to_r2(compressed_image, filename)
+#                 # ✅ Upload compressed image to R2
+#                 filename = f"gallery/{uuid.uuid4().hex}.jpg"
+#                 image_url = upload_to_r2(compressed_image, filename)
 
-                # ✅ Prepare photo record
-                photo = {
-                    "photo_id": str(uuid.uuid4()),
-                    "image": image_url,
-                    "hash": image_hash,   # save hash in DB
-                    "face_embeddings": embeddings
-                }
-                new_photos.append(photo)
+#                 # ✅ Prepare photo record
+#                 photo = {
+#                     "photo_id": str(uuid.uuid4()),
+#                     "image": image_url,
+#                     "hash": image_hash,   # save hash in DB
+#                     "face_embeddings": embeddings
+#                 }
+#                 new_photos.append(photo)
 
-            except Exception as e:
-                print(f"❌ Failed to process {file.filename}: {e}")
-                rejected_files.append(file.filename)
+#             except Exception as e:
+#                 print(f"❌ Failed to process {file.filename}: {e}")
+#                 rejected_files.append(file.filename)for file in photos:
+    try:
+        image_bytes = await file.read()
+
+        image_hash = get_image_hash(image_bytes)
+
+        # ✅ DUPLICATE HASH CHECK
+        duplicate = albums_collection.find_one({"photos.hash": image_hash})
+        if duplicate:
+            rejected_files.append({
+                "file": file.filename,
+                "reason": get_error_message("DuplicateImage")
+            })
+            continue
+
+        image = Image.open(io.BytesIO(image_bytes))
+
+        if image.mode == "RGBA":
+            image = image.convert("RGB")
+
+        # ✅ FACE EXTRACTION
+        loop = asyncio.get_running_loop()
+        embeddings, extraction_error = await loop.run_in_executor(
+            gallery_executor, extract_faces, image
+        )
+
+        if extraction_error in ["LowResolution", "NoFaceDetected"]:
+            rejected_files.append({
+                "file": file.filename,
+                "reason": get_error_message(extraction_error)
+            })
+            continue
+
+        if not embeddings:
+            rejected_files.append({
+                "file": file.filename,
+                "reason": get_error_message("NoEmbeddings")
+            })
+            continue
+
+        # ✅ DUPLICATE EMBEDDING CHECK
+        is_duplicate = False
+        for emb in embeddings:
+            for faces in photo_embeddings.values():
+                if is_duplicate_embedding(emb["embedding"], faces):
+                    is_duplicate = True
+                    break
+            if is_duplicate:
+                break
+
+        if is_duplicate:
+            rejected_files.append({
+                "file": file.filename,
+                "reason": get_error_message("DuplicateEmbedding")
+            })
+            continue
+
+        # ✅ SAVE IMAGE
+        buffer = io.BytesIO()
+        image.save(buffer, format="JPEG", quality=40, optimize=True)
+        buffer.seek(0)
+
+        filename = f"gallery/{uuid.uuid4().hex}.jpg"
+        image_url = upload_to_r2(buffer.getvalue(), filename)
+
+        photo = {
+            "photo_id": str(uuid.uuid4()),
+            "image": image_url,
+            "hash": image_hash,
+            "face_embeddings": embeddings
+        }
+
+        new_photos.append(photo)
+
+    except Exception as e:
+        print(f"❌ Failed to process {file.filename}: {e}")
+        rejected_files.append({
+            "file": file.filename,
+            "reason": get_error_message("ProcessingError")
+        })
+      
 
         # ✅ Update album in database
         if new_photos:
