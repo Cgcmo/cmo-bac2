@@ -1103,36 +1103,41 @@ async def upload_gallery(album_id: str, photos: List[UploadFile] = File(...)):
                     gallery_executor, extract_faces, image
                 )
 
-                if extraction_error in ["LowResolution", "NoFaceDetected"]:
-                    rejected_files.append({
-                        "file": file.filename,
-                        "reason": get_error_message(extraction_error)
-                    })
-                    continue
+                # if extraction_error in ["LowResolution", "NoFaceDetected"]:
+                #     rejected_files.append({
+                #         "file": file.filename,
+                #         "reason": get_error_message(extraction_error)
+                #     })
+                #     continue
 
+                if extraction_error:
+                    print(f"⚠️ {file.filename} issue: {extraction_error}")
+
+                # if not embeddings:
+                #     rejected_files.append({
+                #         "file": file.filename,
+                #         "reason": get_error_message("NoEmbeddings")
+                #     })
+                #     continue
                 if not embeddings:
-                    rejected_files.append({
-                        "file": file.filename,
-                        "reason": get_error_message("NoEmbeddings")
-                    })
-                    continue
+                    embeddings = []
 
                 # ✅ Duplicate embedding check
-                is_duplicate = False
-                for emb in embeddings:
-                    for faces in photo_embeddings.values():
-                        if is_duplicate_embedding(emb["embedding"], faces):
-                            is_duplicate = True
-                            break
-                    if is_duplicate:
-                        break
+                # is_duplicate = False
+                # for emb in embeddings:
+                #     for faces in photo_embeddings.values():
+                #         if is_duplicate_embedding(emb["embedding"], faces):
+                #             is_duplicate = True
+                #             break
+                #     if is_duplicate:
+                #         break
 
-                if is_duplicate:
-                    rejected_files.append({
-                        "file": file.filename,
-                        "reason": get_error_message("DuplicateEmbedding")
-                    })
-                    continue
+                # if is_duplicate:
+                #     rejected_files.append({
+                #         "file": file.filename,
+                #         "reason": get_error_message("DuplicateEmbedding")
+                #     })
+                #     continue
 
                 # ✅ Compress & Upload
                 buffer = io.BytesIO()
@@ -1153,10 +1158,26 @@ async def upload_gallery(album_id: str, photos: List[UploadFile] = File(...)):
 
             except Exception as e:
                 print(f"❌ Failed to process {file.filename}: {e}")
-                rejected_files.append({
-                    "file": file.filename,
-                    "reason": get_error_message("ProcessingError")
-                })
+
+                try:
+                    buffer = io.BytesIO(image_bytes)
+                    filename = f"gallery/{uuid.uuid4().hex}.jpg"
+                    image_url = upload_to_r2(buffer.getvalue(), filename)
+
+                    photo = {
+                        "photo_id": str(uuid.uuid4()),
+                        "image": image_url,
+                        "hash": image_hash,
+                        "face_embeddings": []
+                    }
+
+                    new_photos.append(photo)
+
+                except:
+                    rejected_files.append({
+                        "file": file.filename,
+                        "reason": get_error_message("ProcessingError")
+                    })
 
         # ✅ AFTER LOOP (IMPORTANT FIX)
         if new_photos:
