@@ -1658,3 +1658,52 @@ async def edit_album(
         print("❌ Album update error:", str(e))
         return JSONResponse(content={"error": "Failed to update album"}, status_code=500)
 
+@app.get("/grouped-faces")
+async def grouped_faces():
+    try:
+        threshold = 0.75  # same as your search logic
+
+        clusters = []
+
+        for photo_id, faces in photo_embeddings.items():
+            photo_url = photo_url_mapping.get(photo_id)
+
+            for emb, emb_norm in faces:
+                matched_cluster = None
+
+                # 🔍 Try to match existing cluster
+                for cluster in clusters:
+                    rep_emb, rep_norm = cluster["rep_embedding"]
+
+                    cosine_sim = np.dot(emb, rep_emb) / (emb_norm * rep_norm)
+
+                    if cosine_sim > threshold:
+                        matched_cluster = cluster
+                        break
+
+                if matched_cluster:
+                    matched_cluster["count"] += 1
+                    matched_cluster["photos"].add(photo_url)
+                else:
+                    clusters.append({
+                        "rep_embedding": (emb, emb_norm),
+                        "count": 1,
+                        "photos": set([photo_url])
+                    })
+
+        # 🔄 Convert to response
+        result = []
+        for idx, cluster in enumerate(clusters):
+            result.append({
+                "person_id": str(idx),
+                "count": cluster["count"],
+                "thumbnail": list(cluster["photos"])[0],
+                "photos": list(cluster["photos"])
+            })
+
+        return {"people": result}
+
+    except Exception as e:
+        print("❌ Error in grouped-faces:", str(e))
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
