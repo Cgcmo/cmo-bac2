@@ -920,7 +920,7 @@ def extract_faces(image_pil):
 
         # Step 3: Filter faces with resolution >= 300px
         filtered_faces = []
-        min_size = 180
+        min_size = 80
         tolerance = 50
 
         for face in faces:
@@ -951,7 +951,8 @@ def extract_faces(image_pil):
             filtered_faces,
             key=lambda f: f.get("facial_area", {}).get("w", 0) * f.get("facial_area", {}).get("h", 0),
             reverse=True
-        )[:4]
+        )
+      # [:4]
 
         output_faces = []
 
@@ -1569,19 +1570,19 @@ async def search_by_upload(image: UploadFile = File(...)):
                 for photo_id, faces in block:
                     for emb, emb_norm in faces:
                         cosine_sim = np.dot(query_emb, emb) / (query_norm * emb_norm)
-                        if cosine_sim > 0.75:
+                        if cosine_sim > 0.68:
                             matched_photo_ids.add(photo_id)
                             break
 
             print(f"🔍 Searched block {block_idx + 1} ({start}-{end}), Total matches so far: {len(matched_photo_ids)}")
 
             # Early stopping logic
-            if block_idx == 0 and len(matched_photo_ids) < 16:
-                print(f"🛑 Less than 16 matches after first block. Stopping early.")
-                break
-            if block_idx == 1 and len(matched_photo_ids) < 32:
-                print(f"🛑 Less than 32 matches after second block. Stopping early.")
-                break
+            # if block_idx == 0 and len(matched_photo_ids) < 16:
+            #     print(f"🛑 Less than 16 matches after first block. Stopping early.")
+            #     break
+            # if block_idx == 1 and len(matched_photo_ids) < 32:
+            #     print(f"🛑 Less than 32 matches after second block. Stopping early.")
+            #     break
             # 🚫 No else: we just continue searching all blocks naturally!
 
         if not matched_photo_ids:
