@@ -209,7 +209,7 @@
 #         faces = DeepFace.represent(
 #             img_path=temp_path,
 #             model_name="Facenet",
-#             detector_backend="mtcnn",  # 🔥 MTCNN Detector
+#             detector_backend="retinaface",  # 🔥 MTCNN Detector
 #             enforce_detection=True
 #         )
 
@@ -910,7 +910,7 @@ def extract_faces(image_pil):
         faces = DeepFace.represent(
             img_path=temp_path,
             model_name="Facenet",
-            detector_backend="mtcnn",  # 🔥 MTCNN Detector
+            detector_backend="retinaface",  # 🔥 MTCNN Detector
             enforce_detection=True
         )
 
@@ -921,7 +921,7 @@ def extract_faces(image_pil):
         # Step 3: Filter faces with resolution >= 300px
         filtered_faces = []
         min_size = 80
-        tolerance = 50
+        tolerance = 150
 
         for face in faces:
             area = face.get("facial_area", {})
