@@ -921,7 +921,7 @@ def extract_faces(image_pil):
         # Step 3: Filter faces with resolution >= 300px
         filtered_faces = []
         min_size = 80
-        tolerance = 150
+        tolerance = 50
 
         for face in faces:
             area = face.get("facial_area", {})
@@ -1570,7 +1570,7 @@ async def search_by_upload(image: UploadFile = File(...)):
                 for photo_id, faces in block:
                     for emb, emb_norm in faces:
                         cosine_sim = np.dot(query_emb, emb) / (query_norm * emb_norm)
-                        if cosine_sim > 0.63:
+                        if cosine_sim > 0.68:
                             matched_photo_ids.add(photo_id)
                             break
 
