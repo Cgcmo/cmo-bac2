@@ -1570,7 +1570,7 @@ async def search_by_upload(image: UploadFile = File(...)):
                 for photo_id, faces in block:
                     for emb, emb_norm in faces:
                         cosine_sim = np.dot(query_emb, emb) / (query_norm * emb_norm)
-                        if cosine_sim > 0.77:
+                        if cosine_sim > 0.75:
                             matched_photo_ids.add(photo_id)
                             break
 
