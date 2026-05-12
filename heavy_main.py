@@ -594,7 +594,7 @@
 #                 for photo_id, faces in block:
 #                     for emb, emb_norm in faces:
 #                         cosine_sim = np.dot(query_emb, emb) / (query_norm * emb_norm)
-#                         if cosine_sim > 0.75:
+#                         if cosine_sim > 0.80:
 #                             matched_photo_ids.add(photo_id)
 #                             break
 
