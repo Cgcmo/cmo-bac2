@@ -1504,6 +1504,9 @@ async def search_by_upload(image: UploadFile = File(...)):
 
     if image.filename == "":
         return JSONResponse(content={"error": "No file selected"}, status_code=400)
+    if extraction_error == "MultipleFacesDetected":
+    return JSONResponse(content={"error": "Multiple faces detected. Please upload single face selfie."}, status_code=400)
+    
 
     # ✅ STREAM upload, avoid full RAM loading
     # image_obj = Image.open(image.file)
