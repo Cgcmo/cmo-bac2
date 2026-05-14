@@ -917,6 +917,10 @@ def extract_faces(image_pil):
         if not faces:
             print("❌ No faces detected.")
             return [],  "NoFaceDetected"
+        if len(faces) > 1:
+            print("❌ Multiple faces detected. Rejecting image.")
+            return [], "MultipleFacesDetected" 
+          
 
         # Step 3: Filter faces with resolution >= 300px
         filtered_faces = []
@@ -1057,7 +1061,8 @@ def get_error_message(error):
         "DuplicateImage": "Duplicate image",
         "DuplicateEmbedding": "Same person already exists",
         "NoEmbeddings": "No face embeddings generated",
-        "ProcessingError": "Image processing failed"
+        "ProcessingError": "Image processing failed",
+      "MultipleFacesDetected": "Image rejected: Multiple faces detected. Please upload single face selfie.",
     }.get(error, "Unknown error")
 
 
@@ -1111,8 +1116,14 @@ async def upload_gallery(album_id: str, photos: List[UploadFile] = File(...)):
                 #     })
                 #     continue
 
+                # if extraction_error:
+                #     print(f"⚠️ {file.filename} issue: {extraction_error}")
                 if extraction_error:
-                    print(f"⚠️ {file.filename} issue: {extraction_error}")
+                    rejected_files.append({
+                        "file": file.filename,
+                        "reason": get_error_message(extraction_error)
+                   })
+                   continue
 
                 # if not embeddings:
                 #     rejected_files.append({
