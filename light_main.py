@@ -2133,7 +2133,61 @@ async def delete_video(video_id: str, user=Depends(admin_required)):
     videos_collection.delete_one({"_id": video_id})
     return {"message": "Video deleted successfully"}
 
+@app.put("/videos/{video_id}")
+async def update_video(
+    video_id: str,
+    title: str = Form(...),
+    desc: str = Form(...),
+    link: str = Form(...),
+    image: UploadFile = File(None),
+    user=Depends(admin_required)
+):
+    try:
+        video = videos_collection.find_one({"_id": video_id})
 
+        if not video:
+            return JSONResponse(
+                content={"error": "Video not found"},
+                status_code=404
+            )
+
+        update_data = {
+            "title": title,
+            "desc": desc,
+            "link": link
+        }
+
+        # Replace image if uploaded
+        if image:
+            delete_from_r2(video.get("image"))
+
+            img_bytes = await image.read()
+
+            filename = f"videos/{uuid.uuid4().hex}.jpg"
+
+            image_url = upload_to_r2(
+                img_bytes,
+                filename
+            )
+
+            update_data["image"] = image_url
+
+        videos_collection.update_one(
+            {"_id": video_id},
+            {"$set": update_data}
+        )
+
+        return {
+            "message": "Video updated successfully"
+        }
+
+    except Exception as e:
+        print("❌ Video update error:", str(e))
+
+        return JSONResponse(
+            content={"error": str(e)},
+            status_code=500
+        )
 
 
 # ---------- Create Live Stream (Admin only) ----------
