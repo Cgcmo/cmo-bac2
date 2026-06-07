@@ -2004,7 +2004,84 @@ async def delete_patrika(patrika_id: str, user=Depends(admin_required)):
     patrika_collection.delete_one({"_id": patrika_id})
     return {"message": "Patrika deleted successfully"}
 
+@app.put("/patrika/{patrika_id}")
+async def update_patrika(
+    patrika_id: str,
+    title: str = Form(...),
+    date: str = Form(...),
+    image: UploadFile = File(None),
+    pdf: UploadFile = File(None),
+    user=Depends(admin_required)
+):
+    try:
+        patrika = patrika_collection.find_one({"_id": patrika_id})
 
+        if not patrika:
+            return JSONResponse(
+                content={"error": "Patrika not found"},
+                status_code=404
+            )
+
+        update_data = {
+            "title": title,
+            "date": date
+        }
+
+        # Replace image
+        if image:
+            delete_from_r2(patrika.get("image"))
+
+            img_bytes = await image.read()
+
+            img_filename = f"patrika/{uuid.uuid4().hex}.jpg"
+
+            img_url = upload_to_r2(
+                img_bytes,
+                img_filename
+            )
+
+            update_data["image"] = img_url
+
+        # Replace PDF
+        if pdf:
+
+            if pdf.content_type != "application/pdf":
+                return JSONResponse(
+                    content={"error": "Only PDF allowed"},
+                    status_code=400
+                )
+
+            delete_from_r2(patrika.get("pdf"))
+
+            pdf_bytes = await pdf.read()
+
+            pdf_filename = f"patrika/{uuid.uuid4().hex}.pdf"
+
+            pdf_url = upload_to_r2(
+                pdf_bytes,
+                pdf_filename
+            )
+
+            update_data["pdf"] = pdf_url
+
+        patrika_collection.update_one(
+            {"_id": patrika_id},
+            {"$set": update_data}
+        )
+
+        return {
+            "message": "Patrika updated successfully"
+        }
+
+    except Exception as e:
+        print("❌ Patrika update error:", str(e))
+
+        return JSONResponse(
+            content={"error": str(e)},
+            status_code=500
+        )
+
+    
 # ---------- Create Video (Admin only) ----------
 @app.post("/videos")
 async def create_video(
