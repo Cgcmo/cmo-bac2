@@ -1904,9 +1904,11 @@ async def delete_notice(notice_id: str, user=Depends(admin_required)):
 
 @app.post("/event-updates")
 async def create_event_update(
-    title: str = Form(...),
+    title_hi: str = Form(...),
+    title_en: str = Form(...),
     date: str = Form(...),
-    desc: str = Form(...),
+    desc_hi: str = Form(...),
+    desc_en: str = Form(...),
     image: UploadFile = File(...),
     user=Depends(admin_required)
 ):
@@ -1918,9 +1920,11 @@ async def create_event_update(
         event_id = str(uuid.uuid4())
         doc = {
             "_id": event_id,
-            "title": title,
+            "title_hi": title_hi,
+            "title_en": title_en,
+            "desc_hi": desc_hi,
+            "desc_en": desc_en,
             "date": date,
-            "desc": desc,
             "image": image_url,
         }
         event_updates_collection.insert_one(doc)
@@ -1932,7 +1936,7 @@ async def create_event_update(
 
 @app.get("/event-updates")
 async def get_event_updates():
-    updates = list(event_updates_collection.find({}, {"_id": 1, "title": 1, "date": 1, "desc": 1, "image": 1}))
+    updates = list(event_updates_collection.find({}, {"_id": 1, "title_hi":1,  "title_en":1,"desc_hi":1,"desc_en":1, "date": 1, "image": 1}))
     return [{"id": str(u["_id"]), **u} for u in updates]
 
 
