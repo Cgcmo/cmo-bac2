@@ -1904,15 +1904,26 @@ async def delete_notice(notice_id: str, user=Depends(admin_required)):
 
 @app.post("/event-updates")
 async def create_event_update(
-    title_hi: str = Form(...),
-    title_en: str = Form(...),
+   title_hi: str = Form(""),
+    title_en: str = Form(""),
     date: str = Form(...),
-    desc_hi: str = Form(...),
-    desc_en: str = Form(...),
+    desc_hi: str = Form(""),
+    desc_en: str = Form(""),
     image: UploadFile = File(...),
     user=Depends(admin_required)
 ):
     try:
+                if not title_hi and not title_en:
+            return JSONResponse(
+                content={"error": "At least one title is required"},
+                status_code=400
+            )
+
+        if not desc_hi and not desc_en:
+            return JSONResponse(
+                content={"error": "At least one description is required"},
+                status_code=400
+            )
         file_bytes = await image.read()
         filename = f"event_updates/{uuid.uuid4().hex}.jpg"
         image_url = upload_to_r2(file_bytes, filename)
