@@ -1901,10 +1901,9 @@ async def delete_notice(notice_id: str, user=Depends(admin_required)):
 
 
 # ========== Event Updates ==========
-
 @app.post("/event-updates")
 async def create_event_update(
-   title_hi: str = Form(""),
+    title_hi: str = Form(""),
     title_en: str = Form(""),
     date: str = Form(...),
     desc_hi: str = Form(""),
@@ -1913,7 +1912,7 @@ async def create_event_update(
     user=Depends(admin_required)
 ):
     try:
-                if not title_hi and not title_en:
+        if not title_hi and not title_en:
             return JSONResponse(
                 content={"error": "At least one title is required"},
                 status_code=400
@@ -1924,6 +1923,7 @@ async def create_event_update(
                 content={"error": "At least one description is required"},
                 status_code=400
             )
+
         file_bytes = await image.read()
         filename = f"event_updates/{uuid.uuid4().hex}.jpg"
         image_url = upload_to_r2(file_bytes, filename)
@@ -1938,11 +1938,63 @@ async def create_event_update(
             "date": date,
             "image": image_url,
         }
+
         event_updates_collection.insert_one(doc)
 
-        return {"id": event_id, "url": image_url, "message": "Event update created successfully"}
+        return {
+            "id": event_id,
+            "url": image_url,
+            "message": "Event update created successfully"
+        }
+
     except Exception as e:
-        return JSONResponse(content={"error": str(e)}, status_code=500)
+        return JSONResponse(
+            content={"error": str(e)},
+            status_code=500
+        )
+
+# @app.post("/event-updates")
+# async def create_event_update(
+#    title_hi: str = Form(""),
+#     title_en: str = Form(""),
+#     date: str = Form(...),
+#     desc_hi: str = Form(""),
+#     desc_en: str = Form(""),
+#     image: UploadFile = File(...),
+#     user=Depends(admin_required)
+# ):
+#     try:
+#                 if not title_hi and not title_en:
+#             return JSONResponse(
+#                 content={"error": "At least one title is required"},
+#                 status_code=400
+#             )
+
+#         if not desc_hi and not desc_en:
+#             return JSONResponse(
+#                 content={"error": "At least one description is required"},
+#                 status_code=400
+#             )
+#         file_bytes = await image.read()
+#         filename = f"event_updates/{uuid.uuid4().hex}.jpg"
+#         image_url = upload_to_r2(file_bytes, filename)
+
+#         event_id = str(uuid.uuid4())
+#         doc = {
+#             "_id": event_id,
+#             "title_hi": title_hi,
+#             "title_en": title_en,
+#             "desc_hi": desc_hi,
+#             "desc_en": desc_en,
+#             "date": date,
+#             "image": image_url,
+#         }
+#         event_updates_collection.insert_one(doc)
+
+#         return {"id": event_id, "url": image_url, "message": "Event update created successfully"}
+#     except Exception as e:
+#         return JSONResponse(content={"error": str(e)}, status_code=500)
+
 
 
 @app.get("/event-updates")
