@@ -1952,6 +1952,52 @@ async def create_event_update(
             content={"error": str(e)},
             status_code=500
         )
+@app.put("/event-updates/{event_id}")
+async def update_event_update(
+    event_id: str,
+    title_hi: str = Form(""),
+    title_en: str = Form(""),
+    desc_hi: str = Form(""),
+    desc_en: str = Form(""),
+    date: str = Form(""),
+    image: UploadFile = File(None),
+    user=Depends(admin_required)
+):
+    try:
+        existing = event_updates_collection.find_one({"_id": event_id})
+        if not existing:
+            return JSONResponse(
+                content={"error": "Event not found"},
+                status_code=404
+            )
+
+        update_data = {
+            "title_hi": title_hi,
+            "title_en": title_en,
+            "desc_hi": desc_hi,
+            "desc_en": desc_en,
+            "date": date,
+        }
+
+        # If new image uploaded
+        if image:
+            file_bytes = await image.read()
+            filename = f"event_updates/{uuid.uuid4().hex}.jpg"
+            image_url = upload_to_r2(file_bytes, filename)
+            update_data["image"] = image_url
+
+        event_updates_collection.update_one(
+            {"_id": event_id},
+            {"$set": update_data}
+        )
+
+        return {"message": "Event updated successfully"}
+
+    except Exception as e:
+        return JSONResponse(
+            content={"error": str(e)},
+            status_code=500
+        )
 
 # @app.post("/event-updates")
 # async def create_event_update(
