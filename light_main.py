@@ -1449,26 +1449,72 @@ class UpdateUserRequest(BaseModel):
     district: str = None
     status: bool = None
 
+
+
 @app.put("/update-user/{user_id}")
-async def update_user(user_id: str, data: UpdateUserRequest):
+async def update_user(
+    user_id: str,
+    name: str = Form(None),
+    mobile: str = Form(None),
+    district: str = Form(None),
+    photo: UploadFile = File(None),
+):
     update_fields = {}
 
-    for field in ["name", "email", "mobile", "district", "status"]:
-        value = getattr(data, field)
-        if value is not None:
-            update_fields[field] = value
+    if name:
+        update_fields["name"] = name
+    if mobile:
+        update_fields["mobile"] = mobile
+    if district:
+        update_fields["district"] = district
+
+    # 🔥 PHOTO UPDATE
+    if photo:
+        file_bytes = await photo.read()
+        ext = photo.filename.split(".")[-1].lower()
+        filename = f"profile/{uuid.uuid4().hex}.{ext}"
+
+        image_url = upload_to_r2(file_bytes, filename)
+        update_fields["photo"] = image_url
 
     if not update_fields:
-        return JSONResponse(content={"error": "No fields to update"}, status_code=400)
+        return JSONResponse(
+            content={"error": "No fields to update"},
+            status_code=400
+        )
 
-    result = users_collection.update_one({"_id": user_id}, {"$set": update_fields})
+    result = users_collection.update_one(
+        {"_id": user_id},
+        {"$set": update_fields}
+    )
 
     if result.modified_count == 0:
-        result = clients_collection.update_one({"_id": user_id}, {"$set": update_fields})
-        if result.modified_count == 0:
-            return JSONResponse(content={"error": "User not found or no changes made"}, status_code=404)
+        return JSONResponse(
+            content={"error": "User not found"},
+            status_code=404
+        )
 
-    return {"message": "User updated successfully"}
+    return {"message": "Profile updated successfully"}
+# @app.put("/update-user/{user_id}")
+# async def update_user(user_id: str, data: UpdateUserRequest):
+#     update_fields = {}
+
+#     for field in ["name", "email", "mobile", "district", "status"]:
+#         value = getattr(data, field)
+#         if value is not None:
+#             update_fields[field] = value
+
+#     if not update_fields:
+#         return JSONResponse(content={"error": "No fields to update"}, status_code=400)
+
+#     result = users_collection.update_one({"_id": user_id}, {"$set": update_fields})
+
+#     if result.modified_count == 0:
+#         result = clients_collection.update_one({"_id": user_id}, {"$set": update_fields})
+#         if result.modified_count == 0:
+#             return JSONResponse(content={"error": "User not found or no changes made"}, status_code=404)
+
+#     return {"message": "User updated successfully"}
 
 
 # @app.get("/users")
@@ -1548,7 +1594,7 @@ async def get_users(
     search: str = Query(None),
     mobile: str = Query(None)
 ):
-    projection = {"name": 1, "email": 1, "mobile": 1, "district": 1, "role": 1, "status": 1}
+    projection = {"name": 1, "email": 1, "mobile": 1, "district": 1, "role": 1, "status": 1,"photo": 1,}
 
     users = list(users_collection.find({}, projection))
     clients = list(clients_collection.find({}, projection))
