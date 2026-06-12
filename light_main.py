@@ -2173,7 +2173,8 @@ async def delete_event_update(event_id: str, user=Depends(admin_required)):
 # ---------- Create Patrika (Admin only) ----------
 @app.post("/patrika")
 async def create_patrika(
-    title: str = Form(...),
+    title_hi: str = Form(""),
+    title_en: str = Form(""),
     date: str = Form(...),
     image: UploadFile = File(...),
     pdf: UploadFile = File(...),
@@ -2195,7 +2196,8 @@ async def create_patrika(
         patrika_id = str(uuid.uuid4())
         patrika_doc = {
             "_id": patrika_id,
-            "title": title,
+            "title_hi": title_hi,
+            "title_en": title_en,
             "date": date,
             "image": img_url,
             "pdf": pdf_url
@@ -2211,7 +2213,14 @@ async def create_patrika(
 # ---------- Get Patrika (Public) ----------
 @app.get("/patrika")
 async def get_patrika():
-    pat = list(patrika_collection.find({}, {"_id": 1, "title": 1, "date": 1, "image": 1, "pdf": 1}))
+    pat = list(patrika_collection.find({}, {
+ "_id":1,
+ "title_hi":1,
+ "title_en":1,
+ "date":1,
+ "image":1,
+ "pdf":1
+}))
     return [{"id": str(p["_id"]), **p} for p in pat]
 
 
@@ -2230,7 +2239,8 @@ async def delete_patrika(patrika_id: str, user=Depends(admin_required)):
 @app.put("/patrika/{patrika_id}")
 async def update_patrika(
     patrika_id: str,
-    title: str = Form(...),
+    title_hi: str = Form(""),
+    title_en: str = Form(""),
     date: str = Form(...),
     image: UploadFile = File(None),
     pdf: UploadFile = File(None),
@@ -2246,7 +2256,8 @@ async def update_patrika(
             )
 
         update_data = {
-            "title": title,
+            "title_hi": title_hi,
+            "title_en": title_en,
             "date": date
         }
 
