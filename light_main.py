@@ -1684,31 +1684,95 @@ async def increment_download_count():
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
-class UpdateClientRequest(BaseModel):
-    name: str = None
-    mobile: str = None
-    district: str = None
-
 @app.put("/update-client/{user_id}")
-async def update_client(user_id: str, data: UpdateClientRequest):
-    allowed_fields = ["name", "mobile", "district"]
+async def update_client(
+    user_id: str,
+    name: str = Form(None),
+    mobile: str = Form(None),
+    district: str = Form(None),
+    photo: UploadFile = File(None)
+):
+    try:
+        update_fields = {}
 
-    update_fields = {}
+        if name:
+            update_fields["name"] = name
 
-    for field in allowed_fields:
-        value = getattr(data, field)
-        if value is not None:
-            update_fields[field] = value
+        if mobile:
+            update_fields["mobile"] = mobile
 
-    if not update_fields:
-        return JSONResponse(content={"error": "No valid fields to update"}, status_code=400)
+        if district:
+            update_fields["district"] = district
 
-    result = clients_collection.update_one({"_id": user_id}, {"$set": update_fields})
+        # Upload profile photo
+        if photo:
+            file_bytes = await photo.read()
 
-    if result.modified_count == 0:
-        return JSONResponse(content={"error": "Client not found or no changes made"}, status_code=404)
+            ext = photo.filename.split(".")[-1].lower()
 
-    return {"message": "Client updated successfully"}
+            filename = f"profile/{uuid.uuid4().hex}.{ext}"
+
+            image_url = upload_to_r2(
+                file_bytes,
+                filename
+            )
+
+            update_fields["photo"] = image_url
+
+        if not update_fields:
+            return JSONResponse(
+                content={"error": "No fields to update"},
+                status_code=400
+            )
+
+        result = clients_collection.update_one(
+            {"_id": user_id},
+            {"$set": update_fields}
+        )
+
+        if result.matched_count == 0:
+            return JSONResponse(
+                content={"error": "Client not found"},
+                status_code=404
+            )
+
+        return {
+            "message": "Profile updated successfully"
+        }
+
+    except Exception as e:
+        print("❌ Update Client Error:", e)
+
+        return JSONResponse(
+            content={"error": str(e)},
+            status_code=500
+        )
+        
+# class UpdateClientRequest(BaseModel):
+#     name: str = None
+#     mobile: str = None
+#     district: str = None
+
+# @app.put("/update-client/{user_id}")
+# async def update_client(user_id: str, data: UpdateClientRequest):
+#     allowed_fields = ["name", "mobile", "district"]
+
+#     update_fields = {}
+
+#     for field in allowed_fields:
+#         value = getattr(data, field)
+#         if value is not None:
+#             update_fields[field] = value
+
+#     if not update_fields:
+#         return JSONResponse(content={"error": "No valid fields to update"}, status_code=400)
+
+#     result = clients_collection.update_one({"_id": user_id}, {"$set": update_fields})
+
+#     if result.modified_count == 0:
+#         return JSONResponse(content={"error": "Client not found or no changes made"}, status_code=404)
+
+#     return {"message": "Client updated successfully"}
 
 
 class UpdateDownloadHistoryRequest(BaseModel):
