@@ -1888,7 +1888,8 @@ async def admin_required(request: Request):
 # ---------- Create Multiple Status (Admin only) ----------
 @app.post("/status")
 async def create_multiple_status(
-    title: str = Form(...),
+    title_hi: str = Form(""),
+    title_en: str = Form(""),
     images: list[UploadFile] = File(...),
     user=Depends(admin_required)
 ):
@@ -1908,7 +1909,8 @@ async def create_multiple_status(
             status_id = str(uuid.uuid4())
             status_doc = {
                 "_id": status_id,
-                "title": title,
+                "title_hi": title_hi,
+                "title_en": title_en,
                 "image": image_url
             }
 
@@ -1933,11 +1935,12 @@ async def create_multiple_status(
 # ---------- Get Status (Public) ----------
 @app.get("/status")
 async def get_status():
-    statuses = list(statuses_collection.find({}, {"_id": 1, "title": 1, "image": 1}))
+    statuses = list(statuses_collection.find({}, {"_id": 1, "title_hi": 1, "title_en": 1, "image": 1}))
     formatted = [
         {
             "id": str(s["_id"]),
-            "title": s.get("title", ""),
+            "title_hi": s.get("title_hi", ""),
+            "title_en": s.get("title_en", ""),
             "image": s.get("image", "")
         }
         for s in statuses
