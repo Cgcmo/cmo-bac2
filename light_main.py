@@ -1965,7 +1965,8 @@ async def delete_status(status_id: str, user=Depends(admin_required)):
 # ---------- Create Notice (Admin only) ----------
 @app.post("/notices")
 async def create_notice(
-    title: str = Form(...),
+    title_hi: str = Form("")
+    title_en: str = Form("")
     date: str = Form(...),
     pdf: UploadFile = File(...),
     user=Depends(admin_required)
@@ -1981,7 +1982,8 @@ async def create_notice(
         notice_id = str(uuid.uuid4())
         notice_doc = {
             "_id": notice_id,
-            "title": title,
+            "title_hi": title_hi,
+            "title_en": title_en,
             "date": date,
             "pdf": pdf_url
         }
@@ -1996,7 +1998,7 @@ async def create_notice(
 # ---------- Get Notices (Public) ----------
 @app.get("/notices")
 async def get_notices():
-    notices = list(notices_collection.find({}, {"_id": 1, "title": 1, "date": 1, "pdf": 1}))
+    notices = list(notices_collection.find({}, {"_id": 1, "title_hi": 1,"title_en": 1, "date": 1, "pdf": 1}))
     formatted = [{"id": str(n["_id"]), **n} for n in notices]
     return formatted
 
