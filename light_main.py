@@ -212,6 +212,34 @@ async def get_youtube_live():
     YT_CACHE.update({"data": data, "last_fetch": now})
     return data
 
+# ---------- Admin Live Stream List ----------
+@app.get("/ytlive/list")
+async def get_live_streams():
+
+    streams = list(
+        ytlive_collection.find(
+            {},
+            {
+                "_id": 1,
+                "title_hi": 1,
+                "title_en": 1,
+                "desc_hi": 1,
+                "desc_en": 1,
+                "link": 1,
+                "image": 1,
+                "status": 1,
+                "createdAt": 1
+            }
+        )
+    )
+
+    return [
+        {
+            "id": str(s["_id"]),
+            **s
+        }
+        for s in streams
+    ]
 # @app.get("/ytlive")
 # async def get_youtube_live():
 #     """
