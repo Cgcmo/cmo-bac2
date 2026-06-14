@@ -2482,37 +2482,55 @@ async def update_video(
 
 @app.post("/ytlive")
 async def create_live_stream(
-    title: str = Form(...),
+    title_hi: str = Form(""),
+    title_en: str = Form(""),
+    desc_hi: str = Form(""),
+    desc_en: str = Form(""),
     link: str = Form(...),
     image: UploadFile = File(...),
-    status: bool = Form(True),   # default True
+    status: bool = Form(True),
     user=Depends(admin_required)
 ):
     try:
-        # ✅ Upload image to R2
         file_bytes = await image.read()
+
         filename = f"ytlive/{uuid.uuid4().hex}.jpg"
         image_url = upload_to_r2(file_bytes, filename)
 
-        # ✅ If status is True, set all others to False
         if status:
-            ytlive_collection.update_many({}, {"$set": {"status": False}})
+            ytlive_collection.update_many(
+                {},
+                {"$set": {"status": False}}
+            )
 
         live_id = str(uuid.uuid4())
+
         live_doc = {
             "_id": live_id,
-            "title": title,
+            "title_hi": title_hi,
+            "title_en": title_en,
+            "desc_hi": desc_hi,
+            "desc_en": desc_en,
             "link": link,
             "image": image_url,
             "status": status,
             "createdAt": datetime.utcnow()
         }
+
         ytlive_collection.insert_one(live_doc)
 
-        return {"id": live_id, "url": image_url, "message": "Live stream added successfully"}
-    except Exception as e:
-        return JSONResponse(content={"error": str(e)}, status_code=500)
+        return {
+            "id": live_id,
+            "image": image_url,
+            "message": "Live stream added successfully"
+        }
 
+    except Exception as e:
+        print("❌ Live stream error:", str(e))
+        return JSONResponse(
+            content={"error": str(e)},
+            status_code=500
+        )
 
 
 # # ---------- Get Live Streams (Public) ----------
