@@ -1965,8 +1965,8 @@ async def delete_status(status_id: str, user=Depends(admin_required)):
 # ---------- Create Notice (Admin only) ----------
 @app.post("/notices")
 async def create_notice(
-    title_hi: str = Form("")
-    title_en: str = Form("")
+    title_hi: str = Form(""),
+    title_en: str = Form(""),
     date: str = Form(...),
     pdf: UploadFile = File(...),
     user=Depends(admin_required)
