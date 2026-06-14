@@ -2322,7 +2322,10 @@ async def update_patrika(
 # ---------- Create Video (Admin only) ----------
 @app.post("/videos")
 async def create_video(
-    title: str = Form(...),
+    title_hi: str = Form(""),
+    title_en: str = Form(""),
+    desc_hi: str = Form(""),
+    desc_en: str = Form(""),
     desc: str = Form(...),
     link: str = Form(...),              # embedded link (e.g. YouTube embed url)
     image: UploadFile = File(...),      # cover image
@@ -2337,7 +2340,10 @@ async def create_video(
         video_id = str(uuid.uuid4())
         video_doc = {
             "_id": video_id,
-            "title": title,
+            "title_hi": title_hi,
+            "title_en": title_en,
+            "desc_hi": desc_hi,
+            "desc_en": desc_en,
             "desc": desc,
             "link": link,
             "image": image_url,
