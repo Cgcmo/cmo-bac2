@@ -121,7 +121,7 @@ YT_CACHE = {
 }
 
 
-@app.get("/youtube-live")
+@app.get("/ytlive")
 async def get_youtube_live():
     """
     Priority:
@@ -2322,10 +2322,7 @@ async def update_patrika(
 # ---------- Create Video (Admin only) ----------
 @app.post("/videos")
 async def create_video(
-    title_hi: str = Form(""),
-    title_en: str = Form(""),
-    desc_hi: str = Form(""),
-    desc_en: str = Form(""),
+    title: str = Form(...),
     desc: str = Form(...),
     link: str = Form(...),              # embedded link (e.g. YouTube embed url)
     image: UploadFile = File(...),      # cover image
@@ -2340,10 +2337,7 @@ async def create_video(
         video_id = str(uuid.uuid4())
         video_doc = {
             "_id": video_id,
-            "title_hi": title_hi,
-            "title_en": title_en,
-            "desc_hi": desc_hi,
-            "desc_en": desc_en,
+            "title": title,
             "desc": desc,
             "link": link,
             "image": image_url,
@@ -2434,52 +2428,49 @@ async def update_video(
 
 
 # ---------- Create Live Stream (Admin only) ----------
+# @app.post("/ytlive")
+# async def create_live_stream(
+#     title: str = Form(...),
+#     link: str = Form(...),
+#     image: UploadFile = File(...),
+#     status: bool = Form(True),   # default True
+#     user=Depends(admin_required)
+# ):
+#     try:
+#         # ✅ Upload image to R2
+#         file_bytes = await image.read()
+#         filename = f"ytlive/{uuid.uuid4().hex}.jpg"
+#         image_url = upload_to_r2(file_bytes, filename)
 
-@app.post("youtube-live")
-async def create_live_stream(
-    title: str = Form(...),
-    link: str = Form(...),
-    image: UploadFile = File(...),
-    status: bool = Form(True),   # default True
-    user=Depends(admin_required)
-):
-    try:
-        # ✅ Upload image to R2
-        file_bytes = await image.read()
-        filename = f"ytlive/{uuid.uuid4().hex}.jpg"
-        image_url = upload_to_r2(file_bytes, filename)
+#         # ✅ If status is True, set all others to False
+#         if status:
+#             ytlive_collection.update_many({}, {"$set": {"status": False}})
 
-        # ✅ If status is True, set all others to False
-        if status:
-            ytlive_collection.update_many({}, {"$set": {"status": False}})
+#         live_id = str(uuid.uuid4())
+#         live_doc = {
+#             "_id": live_id,
+#             "title": title,
+#             "link": link,
+#             "image": image_url,
+#             "status": status,
+#             "createdAt": datetime.utcnow()
+#         }
+#         ytlive_collection.insert_one(live_doc)
 
-        live_id = str(uuid.uuid4())
-        live_doc = {
-            "_id": live_id,
-            "title": title,
-            "link": link,
-            "image": image_url,
-            "status": status,
-            "createdAt": datetime.utcnow()
-        }
-        ytlive_collection.insert_one(live_doc)
-
-        return {"id": live_id, "url": image_url, "message": "Live stream added successfully"}
-    except Exception as e:
-        return JSONResponse(content={"error": str(e)}, status_code=500)
+#         return {"id": live_id, "url": image_url, "message": "Live stream added successfully"}
+#     except Exception as e:
+#         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
 
 # # ---------- Get Live Streams (Public) ----------
-
-@app.get("youtube-live")
-async def get_live_streams():
-    streams = list(ytlive_collection.find({}, {"_id": 1, "title": 1, "link": 1, "image": 1, "status": 1, "createdAt": 1}))
-    return [{"id": str(s["_id"]), **s} for s in streams]
+# @app.get("/ytlive")
+# async def get_live_streams():
+#     streams = list(ytlive_collection.find({}, {"_id": 1, "title": 1, "link": 1, "image": 1, "status": 1, "createdAt": 1}))
+#     return [{"id": str(s["_id"]), **s} for s in streams]
 
 
 # ---------- Delete Live Stream (Admin only) ----------
-
 @app.delete("/ytlive/{stream_id}")
 async def delete_live_stream(stream_id: str, user=Depends(admin_required)):
     doc = ytlive_collection.find_one({"_id": stream_id})
