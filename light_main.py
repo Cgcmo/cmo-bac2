@@ -2324,39 +2324,56 @@ async def update_patrika(
 # ---------- Create Video (Admin only) ----------
 @app.post("/videos")
 async def create_video(
-    title: str = Form(...),
-    desc: str = Form(...),
-    link: str = Form(...),              # embedded link (e.g. YouTube embed url)
-    image: UploadFile = File(...),      # cover image
+    title_hi: str = Form(""),
+    title_en: str = Form(""),
+    desc_hi: str = Form(""),
+    desc_en: str = Form(""),
+    link: str = Form(...),
+    image: UploadFile = File(...),
     user=Depends(admin_required)
 ):
     try:
-        # Upload cover image to R2/videos/
         file_bytes = await image.read()
+
         filename = f"videos/{uuid.uuid4().hex}.jpg"
-        image_url = upload_to_r2(file_bytes, filename)
+
+        image_url = upload_to_r2(
+            file_bytes,
+            filename
+        )
 
         video_id = str(uuid.uuid4())
+
         video_doc = {
             "_id": video_id,
-            "title": title,
-            "desc": desc,
+            "title_hi": title_hi,
+            "title_en": title_en,
+            "desc_hi": desc_hi,
+            "desc_en": desc_en,
             "link": link,
             "image": image_url,
         }
+
         videos_collection.insert_one(video_doc)
 
-        return {"id": video_id, "imageUrl": image_url, "message": "Video created successfully"}
+        return {
+            "id": video_id,
+            "image": image_url,
+            "message": "Video created successfully"
+        }
 
     except Exception as e:
         print("❌ Error creating video:", str(e))
-        return JSONResponse(content={"error": str(e)}, status_code=500)
 
+        return JSONResponse(
+            content={"error": str(e)},
+            status_code=500
+        )
 
 # ---------- Get Videos (Public) ----------
 @app.get("/videos")
 async def get_videos():
-    videos = list(videos_collection.find({}, {"_id": 1, "title": 1, "desc": 1, "link": 1, "image": 1}))
+    videos = list(videos_collection.find({}, {"_id": 1, "title_hi": 1, "title_en": 1,"desc_hi": 1,"desc_en": 1, "link": 1, "image": 1}))
     return [{"id": str(v["_id"]), **v} for v in videos]
 
 
@@ -2375,8 +2392,10 @@ async def delete_video(video_id: str, user=Depends(admin_required)):
 @app.put("/videos/{video_id}")
 async def update_video(
     video_id: str,
-    title: str = Form(...),
-    desc: str = Form(...),
+    title_hi: str = Form(""),
+    title_en: str = Form(""),
+    desc_hi: str = Form(""),
+    desc_en: str = Form(""),
     link: str = Form(...),
     image: UploadFile = File(None),
     user=Depends(admin_required)
@@ -2391,8 +2410,10 @@ async def update_video(
             )
 
         update_data = {
-            "title": title,
-            "desc": desc,
+            "title_hi": title_hi,
+            "title_en": title_en,
+            "desc_hi": desc_hi,
+            "desc_en": desc_en,
             "link": link
         }
 
