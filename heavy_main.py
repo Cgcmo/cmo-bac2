@@ -994,7 +994,8 @@ def extract_faces(image_pil):
 # ========== Create Album ==========
 @app.post("/create-album")
 async def create_album(
-    name: str = Form(...),
+    name_hi: str = Form(""),
+    name_en: str = Form(""),
     date: str = Form(...),
     department: str = Form(""),
     districts: str = Form(""),
@@ -1033,7 +1034,8 @@ async def create_album(
         now = datetime.utcnow()
         album = {
             "_id": str(uuid.uuid4()),
-            "name": name,
+            "name_hi": name_hi,
+            "name_en": name_en,
             "date": date,
             "cover": cover_url,
             "department": department,
@@ -1612,7 +1614,8 @@ async def search_by_upload(image: UploadFile = File(...)):
 @app.post("/edit-album/{album_id}")
 async def edit_album(
     album_id: str,
-    name: str = Form(None),
+    name_hi: str = Form(None),
+    name_en: str = Form(None),
     cover: UploadFile = File(None)
 ):
     try:
@@ -1624,8 +1627,11 @@ async def edit_album(
             return JSONResponse(content={"error": "Album not found"}, status_code=404)
 
         # If new name provided
-        if name:
-            update_fields["name"] = name
+        if name_hi is not None:
+            update_fields["name_hi"] = name_hi
+
+        if name_en is not None:
+            update_fields["name_en"] = name_en
 
         # If new cover provided
         if cover:
