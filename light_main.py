@@ -121,7 +121,7 @@ YT_CACHE = {
 }
 
 
-@app.get("/ytlive")
+@app.get("/youtube-live")
 async def get_youtube_live():
     """
     Priority:
