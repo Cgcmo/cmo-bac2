@@ -803,12 +803,33 @@ async def delete_photo(album_id: str, photo_id: str):
     return {"message": "Photo deleted successfully"}
 
 
+# @app.get("/get-events")
+# async def get_events():
+#     events = albums_collection.find({}, {"name": 1, "_id": 0})
+#     event_names = [event["name"] for event in events]
+#     return {"events": event_names}
+
 @app.get("/get-events")
 async def get_events():
-    events = albums_collection.find({}, {"name": 1, "_id": 0})
-    event_names = [event["name"] for event in events]
-    return {"events": event_names}
+    events = list(
+        albums_collection.find(
+            {},
+            {
+                "name_hi": 1,
+                "name_en": 1
+            }
+        )
+    )
 
+    event_names = []
+
+    for event in events:
+        if event.get("name_en"):
+            event_names.append(event["name_en"])
+        elif event.get("name_hi"):
+            event_names.append(event["name_hi"])
+
+    return event_names
 
 class EventRequest(BaseModel):
     eventName: str
