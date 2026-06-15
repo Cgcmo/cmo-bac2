@@ -504,7 +504,8 @@ async def get_albums(
             {"$limit": limit},
             {"$project": {
                 "_id": 1,
-                "name": 1,
+                "name_hi": 1,
+                "name_en": 1,
                 "date": 1,
                 "cover": 1,
                 "districts": 1,
