@@ -938,7 +938,13 @@ async def master_search(data: MasterSearchRequest):
 #     partialQuery: str
 @app.get("/search-suggestions")
 async def search_suggestions():
-    events = [e["name"] for e in albums_collection.find({}, {"name": 1})]
+    events = []
+
+    for e in albums_collection.find({}, {"name_hi": 1, "name_en": 1}):
+        if e.get("name_hi"):
+            events.append(e["name_hi"])
+        if e.get("name_en"):
+            events.append(e["name_en"])
     departments = [d["name"] for d in departments_collection.find({}, {"name": 1})]
     districts = [d["name"] for d in districts_collection.find({}, {"name": 1})]
 
