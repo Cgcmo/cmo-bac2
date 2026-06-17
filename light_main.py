@@ -841,7 +841,12 @@ async def fetch_album_photos(data: EventRequest):
     if not event_name:
         return JSONResponse(content={"error": "Event name is required"}, status_code=400)
 
-    album = albums_collection.find_one({"name": event_name})
+    album = albums_collection.find_one({
+    "$or": [
+        {"name_hi": event_name},
+        {"name_en": event_name}
+    ]
+})
 
     if not album:
         return JSONResponse(content={"error": "No album found with this name"}, status_code=404)
@@ -934,18 +939,21 @@ async def master_search(data: MasterSearchRequest):
     albums = albums_collection.find()
 
     for album in albums:
-        album_name = album.get("name", "").lower()
+        album_name_hi = album.get("name_hi", "").lower()
+        album_name_en = album.get("name_en", "").lower()
         department = album.get("department", "").lower()
         districts = [d.lower() for d in album.get("districts", [])]
 
         if (
-            query in album_name or
+            query in album_name_hi or
+            query in album_name_en or
             query in department or
             any(query in d for d in districts)
         ):
             matching_albums.append({
                 "album_id": str(album["_id"]),
-                "name": album.get("name", ""),
+                "name_hi": album.get("name_hi", ""),
+                "name_en": album.get("name_en", ""),
                 "cover": album.get("cover", ""),
                 "date": album.get("date", ""),
                 "department": album.get("department", ""),
