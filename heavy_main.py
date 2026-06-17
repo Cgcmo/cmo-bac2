@@ -1616,6 +1616,8 @@ async def edit_album(
     album_id: str,
     name_hi: str = Form(None),
     name_en: str = Form(None),
+    date: str = Form(None),    
+    districts: str = Form(None),
     cover: UploadFile = File(None)
 ):
     try:
@@ -1632,6 +1634,17 @@ async def edit_album(
 
         if name_en is not None:
             update_fields["name_en"] = name_en
+
+        # If new date provided
+        if date is not None:
+            update_fields["date"] = date
+
+# If new district provided
+        if districts is not None:
+            update_fields["districts"] = [districts]
+        
+
+      
 
         # If new cover provided
         if cover:
