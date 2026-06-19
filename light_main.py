@@ -611,6 +611,41 @@ async def client_login(data: ClientLoginRequest):
         "role": client.get("role", "User")
     }
 
+class VerifyPasswordRequest(BaseModel):
+    mobile: str
+    password: str
+
+@app.post("/verify-password")
+async def verify_password(data: VerifyPasswordRequest):
+
+    client = clients_collection.find_one({
+        "mobile": data.mobile
+    })
+
+    if not client:
+        return {
+            "success": False,
+            "message": "User not found"
+        }
+
+    if not check_password_hash(
+        client["password"],
+        data.password
+    ):
+        return {
+            "success": False,
+            "message": "Invalid password"
+        }
+
+    return {
+        "success": True,
+        "userId": str(client["_id"]),
+        "name": client.get("name", ""),
+        "mobile": client.get("mobile", ""),
+        "district": client.get("district", ""),
+        "role": client.get("role", "User")
+    }
+
 @app.post("/record-visit")
 async def record_visit():
     try:
@@ -1688,9 +1723,16 @@ async def get_users(
     #     combined_users = [u for u in combined_users if mobile in str(u["mobile"])]
 
     if search:
-        combined_users = [
+    search_lower = search.lower()
+
+    combined_users = [
         u for u in combined_users
-        if search.lower() in u["name"].lower() or search in str(u["mobile"])
+        if (
+            search_lower in u.get("name", "").lower()
+            or search_lower in str(u.get("mobile", "")).lower()
+            or search_lower in u.get("district", "").lower()
+            or search_lower in u.get("email", "").lower()
+        )
     ]
 
 
