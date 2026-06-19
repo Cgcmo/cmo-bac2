@@ -1723,17 +1723,17 @@ async def get_users(
     #     combined_users = [u for u in combined_users if mobile in str(u["mobile"])]
 
     if search:
-    search_lower = search.lower()
+        search_lower = search.lower()
 
-    combined_users = [
-        u for u in combined_users
-        if (
-            search_lower in u.get("name", "").lower()
-            or search_lower in str(u.get("mobile", "")).lower()
-            or search_lower in u.get("district", "").lower()
-            or search_lower in u.get("email", "").lower()
-        )
-    ]
+        combined_users = [
+            u for u in combined_users
+            if (
+                search_lower in u.get("name", "").lower()
+                or search_lower in str(u.get("mobile", "")).lower()
+                or search_lower in u.get("district", "").lower()
+                or search_lower in u.get("email", "").lower()
+            )
+        ]
 
 
     total = len(combined_users)
