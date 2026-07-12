@@ -430,28 +430,31 @@ async def get_live_streams():
 
 # ========== Upload Helpers ==========
 
-def upload_to_r2(image_input, filename):
+def upload_to_r2(file_input, filename):
     try:
-        ext = filename.split('.')[-1].lower()
+        ext = filename.split(".")[-1].lower()
+
         if ext in ["jpg", "jpeg"]:
             content_type = "image/jpeg"
         elif ext == "png":
             content_type = "image/png"
+        elif ext == "pdf":
+            content_type = "application/pdf"
         else:
             content_type = "application/octet-stream"
 
         s3_client.put_object(
             Bucket=R2_BUCKET_NAME,
             Key=filename,
-            Body=image_input,
+            Body=file_input,
             ContentType=content_type,
-            ACL='public-read'
+            ContentDisposition="inline",   # <-- ADD THIS
         )
 
-        public_url = f"https://{PUBLIC_BUCKET_DOMAIN}/{filename}"
-        return public_url
+        return f"https://{PUBLIC_BUCKET_DOMAIN}/{filename}"
+
     except Exception as e:
-        print("❌ Upload to R2 failed:", str(e))
+        print("❌ Upload to R2 failed:", e)
         return None
 
 def delete_from_r2(file_url):
